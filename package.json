@@ -1,0 +1,18 @@
+{
+  "name": "christopher-scott-site",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Christopher Scott \u2014 IT Consulting, Cybersecurity & Web Development",
+  "scripts": {
+    "start": "node server.js",
+    "check": "node --check app.js && node --check config.js && node --check content.js && node --check server.js && node scripts/validate-content.js && node --check service-details.js && node scripts/validate-directory.js && node --check blog-editor.js && node scripts/test-blog.mjs",
+    "check:browser": "node scripts/browser-check.js",
+    "blog:build": "node scripts/build-blog.mjs",
+    "prestart": "npm run blog:build",
+    "blog:import": "node scripts/import-post.mjs"
+  },
+  "devDependencies": {
+    "marked": "^18.1.1",
+    "sanitize-html": "^2.18.1"
+  }
+}

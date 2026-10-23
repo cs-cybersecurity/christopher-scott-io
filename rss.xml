@@ -1,0 +1,315 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
+<channel><title>Christopher Scott — Blog</title><link>https://christopher-scott.net/#blog</link><description>Technical writing by Christopher Scott.</description><language>en-us</language><atom:link href="https://christopher-scott.net/rss.xml" rel="self" type="application/rss+xml"/><lastBuildDate>Mon, 30 Jun 2025 12:00:00 GMT</lastBuildDate>
+<item><title>Self-Host Next.js with Docker and Nginx</title><link>https://christopher-scott.net/#blog/self-host-nextjs-with-docker-and-nginx</link><guid isPermaLink="true">https://christopher-scott.net/#blog/self-host-nextjs-with-docker-and-nginx</guid><pubDate>Mon, 30 Jun 2025 12:00:00 GMT</pubDate><description>A hands-on guide to self-hosting a Next.js application with Docker, Nginx, Cloudflare, and Let&apos;s Encrypt on a VPS.</description><content:encoded>&lt;p&gt;Vercel’s great for getting a Next.js app online fast, but if you’re looking to cut costs or take full control of your setup, self-hosting is the way to go. In this guide, I’ll walk you through spinning up a production-ready Next.js app on a VPS using Docker, and Nginx. In addition, I&apos;ll show you how to configure and automate Cloudflare SSL, and configure VPS Firewall settings.&lt;/p&gt;
+&lt;h2 id=&quot;post-table-of-contents&quot;&gt;Table of Contents&lt;/h2&gt;
+&lt;ol&gt;
+&lt;li&gt;&lt;strong&gt;Dockerize Next.js app locally&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Ubuntu Server Configuration&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Deploy Next.js app to VPS&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Configure and Automate HTTPS + SSL&lt;/strong&gt;&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Configure VPS Firewall&lt;/strong&gt;&lt;/li&gt;
+&lt;/ol&gt;
+&lt;h2 id=&quot;post-overview&quot;&gt;Overview&lt;/h2&gt;
+&lt;p&gt;Here’s the stack we’ll be working with:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Docker&lt;/strong&gt; – Keeps the app environment consistent across local and production.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Nginx&lt;/strong&gt; – Acts as a reverse proxy and handles SSL termination.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Cloud provider of your choice&lt;/strong&gt; – I’m using Linode, but you can roll with whatever VPS you prefer.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Cloudflare&lt;/strong&gt; – Speeds things up globally by caching static assets and protecting your origin.&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;PuTTY and WinSCP&lt;/strong&gt; – Tools for connecting to your server over SSH and transferring files from Windows.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;post-1-dockerize-your-next-js-app-locally&quot;&gt;1. Dockerize your Next.js app locally&lt;/h2&gt;
+&lt;p&gt;First up, let’s dockerize the Next.js app. This gives us a clean, consistent environment we can run anywhere, local, VPS, whatever. Install Docker desktop, if you don&apos;t already have it, &lt;a href=&quot;https://docs.docker.com/desktop/setup/install/windows-install/&quot; rel=&quot;noopener noreferrer&quot;&gt;Docker Desktop for Windows&lt;/a&gt;.&lt;/p&gt;
+&lt;p&gt;Start by tweaking your &lt;code&gt;next.config.mjs&lt;/code&gt; to output a standalone build. That keeps the production image lightweight:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-javascript&quot;&gt;export default {
+  ...nextConfig,
+  output: &apos;standalone&apos;,
+};
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Next, drop a &lt;code&gt;Dockerfile&lt;/code&gt; in the root of your project and add this:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# Builder image
+FROM node:18-alpine AS builder
+
+WORKDIR /app
+
+# First install dependencies so we can cache them
+RUN apk update &amp;amp;&amp;amp; apk upgrade
+RUN apk add curl
+
+COPY package.json package-lock.json ./
+RUN npm install --legacy-peer-deps
+
+# Now copy the rest of the app and build it
+COPY . .
+RUN npm run build
+
+# Production image
+FROM node:18-alpine AS runner
+
+WORKDIR /app
+
+# Create a non-root user
+RUN addgroup -S nonroot &amp;amp;&amp;amp; adduser -S nonroot -G nonroot
+USER nonroot
+
+# Copy the standalone output from the builder image
+COPY --from=builder --chown=nonroot:nonroot /app/.next/standalone ./
+COPY --from=builder --chown=nonroot:nonroot /app/public ./public
+COPY --from=builder --chown=nonroot:nonroot /app/.next/static ./.next/static
+
+# Prepare the app for production
+ENV NEXT_TELEMETRY_DISABLED=1
+ENV NODE_ENV=production
+ENV HOSTNAME=&quot;0.0.0.0&quot;
+
+EXPOSE 3000
+
+# Start the app
+CMD [&quot;node&quot;, &quot;server.js&quot;]
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Create a &lt;code&gt;.dockerignore&lt;/code&gt; file to keep unnecessary files out of the Docker build:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;gitignore
+node_modules
+Dockerfile
+README.md
+.dockerignore
+.git
+.next
+.env*
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;At this point, you should be able to build and run the app with Docker:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;docker build -t my-nextjs-app .
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Try it out locally:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;docker run -p 3000:3000 my-nextjs-app
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Head over to &lt;code&gt;http://localhost:3000&lt;/code&gt;, you should see your Next.js root page.&lt;/p&gt;
+&lt;p&gt;Now let’s get it live so the rest of the world can see it too.&lt;/p&gt;
+&lt;h2 id=&quot;post-2-ubuntu-server-configuration&quot;&gt;2. Ubuntu Server Configuration&lt;/h2&gt;
+&lt;p&gt;This guide assumes you already have an Ubuntu server with your cloud provider of choice.&lt;/p&gt;
+&lt;p&gt;SSH into the server&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ssh root@your-server-ip
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Update your package list:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;apt update -y
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Then install Docker:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-bash&quot;&gt;# Add Docker&apos;s official GPG key and repository
+apt install -y ca-certificates curl gnupg
+install -m 0755 -d /etc/apt/keyrings
+curl -fsSL https://download.docker.com/linux/ubuntu/gpg | gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+chmod a+r /etc/apt/keyrings/docker.gpg
+echo &quot;deb [arch=&quot;$(dpkg --print-architecture)&quot; signed-by=/etc/apt/keyrings/docker.gpg] https://download.docker.com/linux/ubuntu &quot;$(. /etc/os-release &amp;amp;&amp;amp; echo &quot;$VERSION_CODENAME&quot;)&quot; stable&quot; | tee /etc/apt/sources.list.d/docker.list &amp;gt; /dev/null
+
+# Install Docker packages
+apt update -y
+apt install -y docker-ce docker-ce-cli containerd.io docker-buildx-plugin docker-compose-plugin
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Docker should be good to go now. Run &lt;code&gt;docker --version&lt;/code&gt; to double-check it’s installed.&lt;/p&gt;
+&lt;p&gt;Enable the firewall:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;ufw allow ssh
+ufw allow http
+ufw allow https
+ufw enable
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Make sure your cloud provider’s firewall is set to allow incoming traffic on ports 22, 80, 443, and 3000.&lt;/p&gt;
+&lt;p&gt;Let&apos;s not forget to update the server as well:&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;apt update &amp;amp;&amp;amp; apt upgrade -y
+&lt;/code&gt;&lt;/pre&gt;
+&lt;h2 id=&quot;post-3-deploy-next-js-app-to-vps&quot;&gt;3. Deploy Next.js app to VPS&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://winscp.net/eng/download.php&quot; rel=&quot;noopener noreferrer&quot;&gt;Install WinSCP&lt;/a&gt; if you don&apos;t already have it, this will help visualize files, directories, and deploy to our server.&lt;/p&gt;
+&lt;p&gt;In WinSCP log into your server. Create &lt;code&gt;/website/&lt;/code&gt; directory under &lt;code&gt;/&lt;/code&gt;. Then drag and drop Next.js project files:&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/winscp-deployment.png&quot; alt=&quot;Transferring the Next.js project into the server website directory with WinSCP&quot; loading=&quot;lazy&quot; /&gt;
+&lt;em&gt;(Disclaimer) screenshot for demonstration, please don&apos;t copy unnecessary files over&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;Now test building your Next.js docker container on your VPS from the &lt;code&gt;/website/&lt;/code&gt; directory.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;docker build -t my-nextjs-app .
+&lt;/code&gt;&lt;/pre&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;docker run -p 3000:3000 my-nextjs-app
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;You should now be able to see your Next.js site at &lt;code&gt;http://your-ip-addrress:3000&lt;/code&gt;.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Nginx Configuration and Testing&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Nginx sits in front of your app, handling traffic on ports 80 and 443, and passing it to port 3000 where your site actually lives.&lt;/p&gt;
+&lt;p&gt;Begin with installing and running Nginx.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo apt-get install nginx
+sudo service nginx start
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Nginx could honestly be its own course, but let’s keep it simple. Drop the config below into &lt;code&gt;/etc/nginx/sites-available/default&lt;/code&gt; and carry on like a true script kiddie.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;server {
+    listen 80;
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+    }
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Check it and reload the config.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo nginx -t
+sudo nginx -s reload
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;You should be able to access &lt;code&gt;http://your-ip-address&lt;/code&gt; now without specifying the 3000 port.&lt;/p&gt;
+&lt;p&gt;&lt;em&gt;if not&lt;/em&gt;, try symlinking &lt;code&gt;/etc/nginx/sites-available/default&lt;/code&gt; &amp;amp; &lt;code&gt;/etc/nginx/sites-enabled/default&lt;/code&gt;&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/default
+
+sudo nginx -s reload
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Verify your Next.js site is live at &lt;code&gt;http://your-ip-address&lt;/code&gt;, before proceeding to the next step.&lt;/p&gt;
+&lt;h2 id=&quot;post-4-configure-and-automate-https-ssl&quot;&gt;4. Configure and Automate HTTPS + SSL&lt;/h2&gt;
+&lt;p&gt;This guide assumes you&apos;re using Cloudflare.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Configure DNS Records&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Ensure each domain has these two A records, specifying &lt;code&gt;www&lt;/code&gt; &amp;amp; &lt;code&gt;your-domain.com&lt;/code&gt;, with your origin server IP address. Ensure proxy status is enabled.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/cloudflare-dns-example.png&quot; alt=&quot;Example Cloudflare DNS A records with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/cloudflare-dns-origin.png&quot; alt=&quot;Cloudflare DNS A records pointing to the VPS origin with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;
+&lt;em&gt;(Informational) Cloudflare Dashboard &amp;gt; DNS &amp;gt; Records&lt;/em&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Enable SSL/TLS&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;In Cloudflare, head to the &lt;em&gt;SSL/TLS &amp;gt; Overview&lt;/em&gt; settings and set your domain to &lt;em&gt;Automatic&lt;/em&gt; or &lt;em&gt;Flexible&lt;/em&gt;.&lt;/p&gt;
+&lt;p&gt;Hit &lt;code&gt;https://your-domain.com&lt;/code&gt; to confirm HTTPS is live.&lt;/p&gt;
+&lt;p&gt;You &lt;em&gt;could&lt;/em&gt; stop here—Cloudflare handles HTTPS for users, even if traffic to your origin stays on port 80. &lt;/p&gt;
+&lt;p&gt;But come on, grabbing a Let&apos;s Encrypt cert with autorenewal isn’t that deep. Let’s lock it down end-to-end.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;(Optional) Obtain SSL certificates from Let&apos;s Encrypt&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;To obtain Let&apos;s Encrypt certs, we&apos;ll be using &lt;a href=&quot;https://certbot.eff.org/&quot; rel=&quot;noopener noreferrer&quot;&gt;Certbot&lt;/a&gt;. Before we begin, test if snap is installed.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo snap install hello-world
+
+hello-world
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Ubuntu usually comes with snap base installed, but not always. Run the following if in need.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo apt update
+sudo apt install snapd
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Remove Certbot packages from other package managers to ensure &lt;code&gt;certbot&lt;/code&gt; runs from &lt;code&gt;snap&lt;/code&gt;. Given this tutorial, you&apos;re likely using &lt;code&gt;apt&lt;/code&gt;. &lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo apt-get remove certbot
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Install Certbot.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo snap install --classic certbot
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Prepare (symlink) Certbot.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo ln -s /snap/bin/certbot /usr/bin/certbot
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Use Certbot to receive a Let&apos;s Encrypt certificate, edit our nginx configuration, and handle auto renewal for your domain(s).&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo certbot --nginx
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;Test automatic renewal.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo certbot renew --dry-run
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;The command to renew certbot is installed in one of the following locations:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;/etc/crontab/&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;/etc/cron.*/*&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;systemctl list-timers&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Nice! You’ve got your Let’s Encrypt cert, and it’s all set to auto-renew. Now let’s make sure Nginx is locked in and ready to handle HTTPS traffic from Cloudflare on port 443.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;(Optional) HTTPS Nginx Configuration&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Edit &lt;code&gt;/etc/nginx/sites-available/default&lt;/code&gt;. &lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;Add 2 &lt;code&gt;server&lt;/code&gt; blocks per domain. One for listening on 80, one for 443.&lt;/li&gt;
+&lt;li&gt;Add &lt;code&gt;your-domain1.com&lt;/code&gt; next to &lt;code&gt;server_name&lt;/code&gt; including www.&lt;/li&gt;
+&lt;li&gt;Add the Let&apos;s Encrypt certificates you generated previously.&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;ssl_certificate /etc/letsencrypt/live/your-domain1.com/fullchain.pem;&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;ssl_certificate_key /etc/letsencrypt/live/your-domain1.com/privkey.pem;&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;Add protocols and ciphers.&lt;ul&gt;
+&lt;li&gt;&lt;code&gt;ssl_protocols TLSv1.2 TLSv1.3;&lt;/code&gt;&lt;/li&gt;
+&lt;li&gt;&lt;code&gt;ssl_ciphers HIGH:!aNULL:!MD5;&lt;/code&gt;&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;server {
+    listen 80;
+    listen [::]:80;
+    server_name your-domain1.com www.your-domain1.com;
+    return 301 https://$host$request_uri;
+}
+
+
+server {
+    listen 443 ssl;
+    listen [::]:443 ssl;
+    server_name your-domain1.com www.your-domain1.com;
+    
+    ssl_certificate /etc/letsencrypt/live/your-domain1.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/your-domain1.com/privkey.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers HIGH:!aNULL:!MD5;
+    
+    location / {
+        proxy_pass http://localhost:3000;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection keep-alive;
+        proxy_set_header Host $host;
+        proxy_cache_bypass $http_upgrade;
+
+    }
+
+}
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;&lt;em&gt;TLDR Considerations&lt;/em&gt;:&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;If you’re running multiple domains, give each one its own &lt;code&gt;server&lt;/code&gt; block, sharing can get messy fast.  &lt;/li&gt;
+&lt;li&gt;As for HTTP on port 80? I don’t bother. Any stray requests get hit with a clean 301 redirect to HTTPS, just in case something weird slips through.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;Save file, check, and reload Nginx.&lt;/p&gt;
+&lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;sudo nginx -t
+sudo nginx -s reload
+&lt;/code&gt;&lt;/pre&gt;
+&lt;p&gt;At last, we’re ready for Cloudflare Full (Strict) SSL/TLS. &lt;em&gt;Cue the drum roll...&lt;/em&gt; Time to lock it down end-to-end like a boss.&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;(Optional) Enable Cloudflare Full (strict) SSL/TLS&lt;/strong&gt;&lt;/p&gt;
+&lt;p&gt;Head over to the Cloudflare Dashboard, jump into &lt;em&gt;SSL/TLS &amp;gt; Overview&lt;/em&gt;, and flip your domain to &lt;strong&gt;Full (Strict)&lt;/strong&gt;. Boom, you’ve now got end-to-end encryption. Hit &lt;code&gt;https://your-domain.com&lt;/code&gt; to see it in action.&lt;/p&gt;
+&lt;p&gt;🎉 Congrats, you’re officially legit.&lt;/p&gt;
+&lt;p&gt;Want to peek at your Let’s Encrypt cert? Temporarily disable the orange cloud (Proxy status) under &lt;em&gt;DNS &amp;gt; Records&lt;/em&gt; so you’re hitting your origin directly. Then visit your site, click the padlock in the browser, and you’ll see your cert details.&lt;/p&gt;
+&lt;p&gt;Just don’t forget to turn the proxy back on when you’re done — Cloudflare’s got your back.&lt;/p&gt;
+&lt;h2 id=&quot;post-5-configure-vps-firewall&quot;&gt;5. Configure VPS Firewall&lt;/h2&gt;
+&lt;p&gt;We’ve locked this site down with HTTPS, might as well show the firewall some love too. Every cloud provider’s a little different, so your mileage may vary, but the core idea stays the same.&lt;/p&gt;
+&lt;p&gt;First up, both the &lt;em&gt;Default Inbound&lt;/em&gt; and &lt;em&gt;Default Outbound&lt;/em&gt; policies are set to &lt;strong&gt;drop&lt;/strong&gt;. That means nothing gets in or out unless we explicitly say so. Every protocol, port, source, and destination has to earn its keep.&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/linode-firewall-rules.png&quot; alt=&quot;Linode inbound and outbound firewall rules with default drop policies&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;strong&gt;Inbound Rules&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Allow SSH (TCP 22)&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;Required for remote access via PuTTY or WinSCP.&lt;/li&gt;
+&lt;li&gt;For tighter security, consider restricting access to a known static IP range.   &lt;/li&gt;
+&lt;li&gt;Always use SSH keys — password authentication is for amateurs.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Allow HTTPS (TCP 443)&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;This rule is scoped to &lt;strong&gt;only&lt;/strong&gt; accept inbound traffic from Cloudflare’s IP ranges.&lt;/li&gt;
+&lt;li&gt;This ensures your origin server only responds to trusted proxy requests.    &lt;/li&gt;
+&lt;li&gt;You can find the current list of Cloudflare IPs &lt;a href=&quot;https://www.cloudflare.com/ips/&quot; rel=&quot;noopener noreferrer&quot;&gt;here&lt;/a&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;p&gt;&lt;strong&gt;Outbound Rules&lt;/strong&gt;&lt;/p&gt;
+&lt;ul&gt;
+&lt;li&gt;&lt;strong&gt;Allow HTTP (TCP 80)&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;Required for fetching packages and updates via &lt;code&gt;apt&lt;/code&gt;.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Allow HTTPS (TCP 443)&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;Enables secure communication when pulling certs, packages, or external resources.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;li&gt;&lt;strong&gt;Allow DNS (TCP/UDP 53)&lt;/strong&gt;&lt;ul&gt;
+&lt;li&gt;Needed for domain resolution when installing or updating packages with &lt;code&gt;apt&lt;/code&gt;.&lt;/li&gt;
+&lt;li&gt;No DNS, no downloads — keep it open.&lt;/li&gt;
+&lt;/ul&gt;
+&lt;/li&gt;
+&lt;/ul&gt;
+&lt;h2 id=&quot;post-conclusion&quot;&gt;Conclusion&lt;/h2&gt;
+&lt;p&gt;You’ve just stood up a secure, production-ready Next.js app with Docker, Nginx, and Let’s Encrypt, all self-hosted and protected by Cloudflare. Whether you&apos;re scaling a project or sharpening your devops chops, this setup gives you full control, speed, and flexibility.&lt;/p&gt;
+&lt;h2 id=&quot;post-references-used&quot;&gt;References Used:&lt;/h2&gt;
+&lt;p&gt;&lt;a href=&quot;https://getdeploying.com/guides/deploy-nextjs#6-set-up-cicd-with-github-actions&quot; rel=&quot;noopener noreferrer&quot;&gt;Self-Host Next.js with Kamal and GitHub Actions&lt;/a&gt;
+&lt;a href=&quot;https://nginx.org/en/docs/http/configuring_https_servers.html&quot; rel=&quot;noopener noreferrer&quot;&gt;Configuring HTTPS servers&lt;/a&gt;
+&lt;a href=&quot;https://snapcraft.io/docs/installing-snap-on-ubuntu&quot; rel=&quot;noopener noreferrer&quot;&gt;Installing snap on Ubuntu | Snapcraft documentation&lt;/a&gt;
+&lt;a href=&quot;https://www.hanselman.com/blog/publishing-an-aspnet-core-website-to-a-cheap-linux-vm-host&quot; rel=&quot;noopener noreferrer&quot;&gt;Publishing an ASP.NET Core website to a cheap Linux VM host - Scott Hanselman&apos;s Blog&lt;/a&gt;
+&lt;a href=&quot;https://docs.docker.com/engine/install/ubuntu/&quot; rel=&quot;noopener noreferrer&quot;&gt;Ubuntu | Docker Docs&lt;/a&gt;
+&lt;a href=&quot;https://docs.docker.com/desktop/setup/install/windows-install/&quot; rel=&quot;noopener noreferrer&quot;&gt;Windows | Docker Docs&lt;/a&gt;
+&lt;a href=&quot;https://www.digitalocean.com/community/tutorials/how-to-install-nginx-on-ubuntu-20-04&quot; rel=&quot;noopener noreferrer&quot;&gt;How To Install Nginx on Ubuntu 20.04 | DigitalOcean&lt;/a&gt;
+&lt;a href=&quot;https://letsencrypt.org/&quot; rel=&quot;noopener noreferrer&quot;&gt;Let&apos;s Encrypt&lt;/a&gt;
+&lt;a href=&quot;https://certbot.eff.org/&quot; rel=&quot;noopener noreferrer&quot;&gt;Certbot&lt;/a&gt;
+&lt;a href=&quot;https://www.cloudflare.com/ips/&quot; rel=&quot;noopener noreferrer&quot;&gt;IP Ranges | Cloudflare&lt;/a&gt;&lt;/p&gt;
+</content:encoded></item>
+</channel></rss>

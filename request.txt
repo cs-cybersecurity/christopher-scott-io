@@ -1,0 +1,601 @@
+CODEX TASK: Complete Website Rebuild — Christopher Scott
+
+1. Project objective
+
+Completely rewrite my existing personal website, including its design, content, navigation, positioning, and presentation.
+
+This is not a cosmetic refresh. I want a comprehensive redesign.
+
+My name is Christopher Scott. I am an independent technology consultant and cybersecurity professional offering IT consulting, cybersecurity, cloud infrastructure, compliance consulting, and web development services.
+
+The website must feel like a personal professional portfolio that also functions as a consulting business website.
+
+The primary selling point is me, my professional experience, my expertise, and the services I can personally provide.
+
+Do not make this look like a SaaS startup, an AI automation agency, a large consulting corporation, or a generic cybersecurity vendor.
+
+Review the existing codebase before making changes. You have permission to replace the entire frontend implementation where appropriate, but preserve working deployment infrastructure, environment configurations, and useful existing functionality.
+
+2. Brand positioning and marketing
+
+The overarching business category is:
+
+Technology Consulting
+
+The primary SEO and customer-facing terminology is:
+
+IT Consulting, Cybersecurity & Web Development
+
+Use the following homepage copy exactly.
+
+Primary hero heading
+
+IT Consulting, Cybersecurity & Web Development
+
+Hero description
+
+Expert technology services to build, secure, and modernize your business. From custom web applications and cloud infrastructure to cybersecurity assessments and compliance, we deliver practical solutions for growing organizations.
+
+Personal positioning
+
+Make it immediately apparent that visitors are working directly with Christopher Scott.
+
+Prominently display my full name and establish me as an independent technology consultant.
+
+The ideal visitor should understand within five seconds:
+
+Who I am.
+
+What services I provide.
+
+That they can work with me directly.
+
+How to contact me.
+
+Where to find my professional background.
+
+Use first-person language where appropriate. Avoid corporate language that suggests I have a large staff, proprietary platform, or capabilities beyond those explicitly documented.
+
+Do not describe the company as an AI automation firm.
+
+Remove all legacy AI automation marketing, titles, taglines, and metadata throughout the site.
+
+AI can remain referenced only when it is explicitly part of the original service descriptions I provide.
+
+3. Visual design — extremely important
+
+I want a website that feels personal, bright, sophisticated, minimalist, and approachable.
+
+Think of an accomplished independent technical consultant's personal website, not a startup landing page.
+
+Visual direction
+
+Bright, clean, predominantly light background.
+
+White or warm off-white as the dominant color.
+
+Tasteful blue, teal, or similar accents.
+
+Dark, readable typography.
+
+Generous whitespace.
+
+Elegant, restrained typography with clear hierarchy.
+
+A refined editorial or professional portfolio aesthetic.
+
+Subtle dividers and restrained accent colors.
+
+Clean, structured navigation.
+
+Strong mobile responsiveness.
+
+Natural vertical scrolling.
+
+Avoid completely
+
+Company logos or invented branding symbols.
+
+Monograms, including the existing cs_ brand mark.
+
+Dark hacker-themed aesthetics.
+
+Terminal-style visual designs.
+
+Neon green.
+
+Cybersecurity cliché imagery.
+
+SaaS dashboard aesthetics.
+
+Oversized pill-shaped buttons everywhere.
+
+Gradients covering the entire page.
+
+Floating decorative shapes.
+
+Animated backgrounds.
+
+Excessive cards and boxed sections.
+
+Fake testimonials or client logos.
+
+Pricing tiers.
+
+Marketing statistics without evidence.
+
+Aggressive conversion funnels.
+
+Generic marketing slogans and buzzwords.
+
+Unnecessary animations or decorative effects.
+
+The typography, layout, and actual information should make the website attractive.
+
+The experience should resemble visiting the website of a respected individual professional rather than being sold a software subscription.
+
+Personal identity
+
+Feature my name prominently.
+
+If an existing genuine personal photograph is available in the project, consider using it tastefully. Otherwise, do not invent or generate a portrait. Leave an optional, unobtrusive configuration point for adding a real photograph later.
+
+No fabricated team members, offices, company credentials, customer relationships, or awards.
+
+4. Required site navigation
+
+The website must have the following primary navigation:
+
+Home
+
+Services
+
+Resume
+
+Blog
+
+Contact
+
+Permanently remove the Skills page.
+
+Remove its navigation links, routing, content, associated data, and any references that no longer serve a purpose.
+
+Do not replace it with a differently named skills page.
+
+All navigation must work, including direct navigation and browser back/forward behavior.
+
+Prefer clean, accessible URLs if consistent with the existing project architecture.
+
+5. Homepage design
+
+The homepage should have five primary sections.
+
+A. Introduction
+
+Show my name prominently.
+
+Use the exact heading and description specified in Section 2.
+
+A concise supporting personal identification can read:
+
+"Christopher Scott — Independent Technology Consultant"
+
+Provide two restrained actions:
+
+Explore Services
+
+Get in Touch
+
+The hero should not look like a marketing advertisement.
+
+B. About Christopher
+
+Introduce me as an experienced technology and cybersecurity professional with a background spanning security operations, technical engineering, infrastructure, and consulting.
+
+This section should feel professional and personal, not like a company biography.
+
+Use verified information from my existing website and LinkedIn material where available.
+
+Do not fabricate career achievements, experience lengths, degrees, certifications, or client work.
+
+C. Services overview
+
+Display the following five service categories:
+
+Cybersecurity Consulting
+
+Security assessments, vulnerability management, incident response, Microsoft Defender, identity protection, and cloud security.
+
+Compliance & Risk Advisory
+
+SOC 2, ISO 27001, HIPAA, PCI DSS, CMMC, NIST, and security compliance assessments.
+
+Cloud & IT Consulting
+
+AWS, Azure, Microsoft 365, Active Directory, infrastructure modernization, and migrations.
+
+Web & Software Development
+
+Website development, custom web applications, API development, and secure application architecture.
+
+Technical Advisory & Consulting
+
+Security architect retainers, technology strategy, solution architecture, and ongoing engineering support.
+
+These are marketing-level summaries, not replacements for the full service list.
+
+Each category should link to a relevant section on the Services page.
+
+D. Professional background preview
+
+Include a restrained preview of my professional background.
+
+Link to the Resume page for my actual experience, education, and certifications.
+
+Only use verified facts.
+
+E. Contact invitation
+
+Provide a straightforward, professional opportunity to contact me.
+
+No aggressive sales language.
+
+Something as simple as:
+
+"Have a project in mind?"
+
+"Whether you need help securing your environment, modernizing your infrastructure, or developing a new application, I'd be happy to discuss your requirements."
+
+Do not invent contact details. Reuse existing verified contact information or clearly identify missing configuration.
+
+6. Services page — exact source content required
+
+This requirement is critical.
+
+I have provided a comprehensive services list in the source material shared with this project.
+
+Use that list as the authoritative source of truth.
+
+I want every single service included, with its original service name and its original description preserved word for word.
+
+Do not paraphrase, consolidate, delete, or rename individual services.
+
+Do not decide that some services are redundant and therefore unnecessary.
+
+Do not rewrite service descriptions to improve the marketing.
+
+Do not silently correct grammar, terminology, or inconsistencies within the original descriptions.
+
+The original services source contains categories including:
+
+Compliance and audit
+
+Cloud, DevOps and automation
+
+Microsoft 365 and endpoint security
+
+Cloud and migration
+
+Ongoing advisory
+
+These original categories and their individual offerings must all be represented.
+
+You may reorganize the presentation into intuitive navigation or marketing groupings, but the underlying service names and descriptions must remain exactly as supplied.
+
+Where an original category includes the word "automation," preserve it only as necessary for source fidelity. Do not promote automation as an overarching business identity.
+
+Services page UX
+
+A large number of services must remain easy to browse.
+
+Implement:
+
+Clean category navigation.
+
+Clearly readable individual service headings.
+
+Complete service descriptions.
+
+Responsive layout.
+
+Good visual hierarchy.
+
+Optional category filtering or expandable sections if genuinely useful.
+
+Avoid rendering everything as dozens of visually identical SaaS cards.
+
+An editorial directory layout with clear headings, separators, and restrained interactions would be preferable.
+
+Do not hide the full services catalog behind a contact form.
+
+Web development must also be visible as a top-level offering. However, since it is not comprehensively represented in the original detailed service list, display the approved marketing-level Web & Software Development overview separately rather than inventing new verbatim source entries.
+
+Source fidelity validation
+
+Before finalizing, perform a source-to-output comparison.
+
+Confirm:
+
+Every original service is included.
+
+Every original title matches.
+
+Every original description matches.
+
+No source entry was omitted.
+
+No service descriptions were fabricated.
+
+If an original description is truncated or incomplete in the supplied source, do not invent the missing text. Preserve what is available and report the limitation.
+
+7. Resume page — LinkedIn must be authoritative
+
+The Resume page must contain only the following professional LinkedIn sections:
+
+Experience
+
+Education
+
+Licenses & Certifications
+
+The text must match my LinkedIn profile word for word.
+
+This includes:
+
+Job titles
+
+Employer names
+
+Employment dates
+
+Employment descriptions
+
+Education institutions
+
+Degree names
+
+Education descriptions where present
+
+Certification names
+
+Issuing organizations
+
+Dates and credential information where present
+
+Preserve the wording, sequence, and factual content from LinkedIn.
+
+Do not embellish or rewrite my professional history.
+
+Do not generate resume bullets using AI.
+
+Do not substitute information from my existing site if it conflicts with the LinkedIn source.
+
+If the LinkedIn profile content is not available in the workspace, do not pretend you accessed it or generate a resume based on assumptions.
+
+Instead, create the complete Resume page layout and use a clearly identified temporary empty state for the missing source. Tell me precisely what LinkedIn export or copied profile sections are needed to populate it.
+
+When the content is provided, the page must render it faithfully.
+
+Resume design
+
+The resume should look like a polished online CV.
+
+Use a clean chronological presentation, prominent employer names, readable dates, restrained separators, and well-structured educational and certification entries.
+
+Avoid timelines with excessive decorative elements.
+
+Do not include a separate skills inventory.
+
+Do not include invented proficiency ratings or skill percentages.
+
+8. Blog page — intentionally blank
+
+Keep the Blog page accessible through primary navigation.
+
+However, remove all existing blog content.
+
+Delete or disable sample posts, placeholder articles, generated content, article previews, and fabricated publications.
+
+I will provide separate instructions for the blog functionality and content later.
+
+For now, render only a simple heading:
+
+"Blog"
+
+The remainder of the page can remain empty, aside from the site's global navigation and footer.
+
+Do not add "Coming Soon" text.
+
+Do not generate posts.
+
+Do not create a content management system at this stage.
+
+Avoid unnecessary blog functionality until I provide the next specification.
+
+9. Contact page
+
+Create a simple, professional Contact page.
+
+This is a personal consultancy, not a corporate sales department.
+
+Use a clean headline such as:
+
+"Let's Talk"
+
+Offer verified contact methods already configured in the project.
+
+Include a contact form only if there is an existing working delivery mechanism or a real backend integration. Do not create a form that pretends to send messages.
+
+Do not invent email addresses, phone numbers, scheduling links, or social profiles.
+
+If important information is missing, identify the configuration required.
+
+10. Technical requirements
+
+Inspect the existing implementation, including:
+
+index.html
+
+styles.css
+
+app.js
+
+config.js
+
+Relevant assets
+
+Existing deployment configuration
+
+Any additional application files
+
+The current site uses AI automation-focused metadata, navigation, page copy, and footer content. Remove these references and replace them with the new positioning.
+
+Update the document title, SEO descriptions, Open Graph data, and related metadata.
+
+Use appropriate titles such as:
+
+Christopher Scott | IT Consulting, Cybersecurity & Web Development
+
+Ensure the primary brand identity is my actual name, not a logo.
+
+Preserve the existing production domain and canonical URL unless the current configuration indicates otherwise.
+
+Engineering expectations
+
+Semantic HTML.
+
+Accessible navigation and controls.
+
+Keyboard accessibility.
+
+Responsive desktop, tablet, and mobile layouts.
+
+Readable typography.
+
+Strong color contrast.
+
+Fast page loading.
+
+Minimal dependencies.
+
+No unnecessary frontend frameworks.
+
+No new dependency unless it materially improves maintainability.
+
+No dead links.
+
+No broken navigation.
+
+No console errors.
+
+No nonfunctional decorative UI controls.
+
+Sensible metadata and SEO structure.
+
+Reusable code where appropriate.
+
+Maintain the existing architecture if it remains suitable. You do not need to introduce React, Next.js, or another framework just to redesign the website.
+
+11. Content integrity and prohibited assumptions
+
+Do not manufacture facts.
+
+Specifically, do not invent:
+
+Certifications
+
+Degrees
+
+Employment experience
+
+Years of experience
+
+Client testimonials
+
+Client relationships
+
+Company size
+
+Project case studies
+
+Metrics
+
+Business addresses
+
+Contact information
+
+Do not assume I employ a team.
+
+Do not present third-party tools or products as proprietary technologies.
+
+Do not replace the supplied detailed services with generic AI-generated alternatives.
+
+Keep the distinction clear between authoritative source content and newly authored marketing copy.
+
+12. Final acceptance criteria
+
+Do not consider the task complete until the following conditions are satisfied:
+
+The entire site has been visually redesigned.
+
+The design is bright, clean, personal, and professional.
+
+No corporate logo or cs_ monogram remains.
+
+Christopher Scott is the central identity.
+
+The positioning uses Technology Consulting, IT Consulting, Cybersecurity, and Web Development.
+
+Legacy AI automation marketing is removed.
+
+The homepage uses the exact required hero heading and description.
+
+All five approved service categories are represented.
+
+Every detailed service from my provided source is preserved verbatim.
+
+The Skills page has been completely removed.
+
+The Resume page contains only source-verified LinkedIn content, or remains unpopulated pending that source.
+
+The Blog page is completely blank apart from its heading and global site chrome.
+
+Contact methods are genuine and functional.
+
+Navigation works across desktop and mobile.
+
+Existing deployment behavior is preserved.
+
+The website works without browser console errors.
+
+No unnecessary frameworks or dependencies were introduced.
+
+13. Execution instructions
+
+Implement the changes directly in my existing workspace.
+
+Start by inspecting the project files and identifying the current application structure.
+
+Then perform the complete rewrite rather than simply describing the intended design.
+
+Prioritize a coherent, finished site over leaving old and new designs mixed together.
+
+Do not stop at mockups, planning documents, or suggested snippets.
+
+Use any authoritative source files already present in the workspace. If the complete service list or LinkedIn sections are not available, do not fabricate them. Implement the rest of the site and report exactly which content inputs are missing.
+
+After completing the implementation, provide a concise summary of:
+
+Files changed.
+
+Pages implemented.
+
+How source content was preserved and validated.
+
+Any missing LinkedIn or services source material.
+
+Any configuration I need to provide.
+
+Tests performed and their results.
+
+Final creative direction: I want the online presence of an experienced independent professional who can deliver both technical engineering and cybersecurity consulting services. The website should convey competence through simplicity, thoughtful design, and an authentic professional background—not sales gimmicks.

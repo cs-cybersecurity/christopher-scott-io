@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" role="img" aria-labelledby="title">
+  <title id="title">Christopher Scott — cs</title>
+  <rect width="64" height="64" rx="12" fill="#14263D"/>
+  <path d="M28 25C22 19 10 22 10 33C10 44 22 47 28 41" fill="none" stroke="#F5F2EC" stroke-width="5.5" stroke-linecap="round"/>
+  <path d="M53 25C48 20 37 22 37 28C37 35 54 30 54 39C54 46 42 48 36 42" fill="none" stroke="#FFFCF8" stroke-width="5.5" stroke-linecap="round"/>
+  <rect x="14" y="53" width="22" height="3" rx="1.5" fill="#812C3C"/>
+  <rect x="39" y="53" width="11" height="3" rx="1.5" fill="#B69A66"/>
+</svg>
