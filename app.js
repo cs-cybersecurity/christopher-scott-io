@@ -49,7 +49,7 @@
   }
 
   function contactPage(selected) {
-    return `<div class="container contact-page">${heading('Get in Touch',"Have a project or technical challenge you'd like to discuss? Send me a message.")}<p class="email-display"><span>Email</span><a href="mailto:christopher.scott.biz@gmail.com">christopher.scott.biz@gmail.com</a></p><form id="message-form">${selected?`<p class="service-context">Regarding: ${escape(selected.title)}</p>`:''}<label for="message">Message</label><textarea id="message" name="message" rows="7" required maxlength="6000" placeholder="Tell me about your project or technical challenge.">${selected?escape(`I'd like to discuss ${selected.title}.`):''}</textarea><p class="email-note">Send Message opens a draft in your configured email app. Review and send it there; the website does not deliver email.</p><button type="submit" class="button">Send Message</button><p id="email-status" role="status"></p></form></div>`;
+    return `<div class="container contact-page">${heading('Get in Touch',"Have a project or technical challenge you'd like to discuss? Send me a message.")}<p class="email-display"><span>Email</span><a href="mailto:chris@christopher-scott.net">chris@christopher-scott.net</a></p><form id="message-form" action="https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec" method="post">${selected?`<p class="service-context">Regarding: ${escape(selected.title)}</p>`:''}<label for="visitor-email">Email Address</label><input id="visitor-email" type="email" name="email" required maxlength="254" autocomplete="email"><input type="text" name="website" value="" hidden tabindex="-1" autocomplete="off" aria-hidden="true"><label for="message">Message</label><textarea id="message" name="message" rows="7" required minlength="10" maxlength="5000" placeholder="Tell me about your project or technical challenge.">${selected?escape(`I'd like to discuss ${selected.title}.`):''}</textarea><p class="email-note">Submit your message here, or email me directly.</p><button type="submit" class="button">Send Message</button><p id="email-status" role="status" aria-live="polite"></p></form></div>`;
   }
 
   const blogDate = date => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
@@ -155,16 +155,54 @@
       render();
     }
   });
-  document.addEventListener('submit', event=>{
+  document.addEventListener('input', event=>{
+    if (event.target.form?.id === 'message-form') event.target.setCustomValidity('');
+  });
+  document.addEventListener('submit', async event=>{
     if(event.target.id!=='message-form') return;
     event.preventDefault();
+    const form=event.target;
+    if(form.dataset.submitting === 'true') return;
+    const email=form.elements.email;
+    const message=form.elements.message;
+    email.value=email.value.trim();
+    email.setCustomValidity(email.value.length > 254 ? 'Please use an email address with no more than 254 characters.' : '');
+    message.setCustomValidity(message.value.trim().length < 10 ? 'Please enter at least 10 characters.' : message.value.length > 5000 ? 'Please use no more than 5,000 characters.' : '');
+    if(!form.reportValidity()) return;
     const {section,service}=readRoute();
     const selected=CATALOG.find(c=>c.id===section)?.items.find(i=>i.id===service);
-    const subject=selected ? `Consultation: ${selected.title}` : 'Technology consulting inquiry';
-    const message=document.querySelector('#message').value;
-    const url=`mailto:christopher.scott.biz@gmail.com?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(message)}`;
-    document.querySelector('#email-status').innerHTML=`<span>Email draft requested. Send it from your email app. If it did not open, </span><a href="${escape(url)}">open the draft again</a><span> or email me directly.</span>`;
-    window.location.href=url;
+    const bodyMessage=selected ? `Service: ${selected.title}\n\n${message.value.trim()}` : message.value.trim();
+    if(bodyMessage.length > 5000){
+      message.setCustomValidity('Please keep your message and selected service context within 5,000 characters.');
+      message.reportValidity();
+      return;
+    }
+    const status=form.querySelector('#email-status');
+    if(form.elements.website.value) { status.textContent='Unable to submit this message. Please email me directly.'; return; }
+    const button=form.querySelector('button[type="submit"]');
+    form.dataset.submitting='true';
+    form.setAttribute('aria-busy','true');
+    button.disabled=true;
+    status.textContent='Submitting your message…';
+    const controller=new AbortController();
+    const timeout=setTimeout(()=>controller.abort(),30000);
+    try{
+      const response=await fetch(form.action,{
+        method:'POST', mode:'no-cors', credentials:'omit', signal:controller.signal,
+        body:new URLSearchParams({email:email.value,message:bodyMessage,website:''})
+      });
+      if(response.type !== 'opaque' && !response.ok) throw new Error('Submission failed');
+      status.textContent="Submission request completed. Delivery could not be confirmed. If you don't hear back, please email me directly.";
+    }catch(error){
+      status.textContent=error.name === 'AbortError'
+        ? 'The request timed out and submission could not be confirmed. Please email me directly.'
+        : 'Unable to submit your message. Please check your connection and try again, or email me directly.';
+    }finally{
+      clearTimeout(timeout);
+      form.dataset.submitting='false';
+      form.removeAttribute('aria-busy');
+      button.disabled=false;
+    }
   });
   document.querySelector('#year').textContent = new Date().getFullYear();
   window.addEventListener('hashchange', () => render());

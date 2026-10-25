@@ -89,6 +89,22 @@ async function checkLayout() {
     if (data.method === 'Network.responseReceived' && data.params.response.status >= 400) errors.push(data.params.response);
   });
   await send('Page.enable');await send('Runtime.enable');await send('Log.enable');await send('Network.enable');
+  // Contact tests never send a live email. Block the endpoint as a second safeguard.
+  await send('Network.setBlockedURLs',{urls:['*://script.google.com/*','*://script.googleusercontent.com/*']});
+  await send('Page.addScriptToEvaluateOnNewDocument',{source:`
+    window.__contactRequests=[];
+    window.__contactMode='pending';
+    const nativeFetch=window.fetch.bind(window);
+    window.fetch=(input,options)=>{
+      if(String(input).startsWith('https://script.google.com/')){
+        window.__contactRequests.push({url:String(input),method:options.method,mode:options.mode,credentials:options.credentials,body:Array.from(options.body.entries())});
+        if(window.__contactMode==='failure') return Promise.reject(new TypeError('Simulated offline connection'));
+        if(window.__contactMode==='http-failure') return Promise.resolve({type:'basic',ok:false,status:500});
+        return new Promise(resolve=>window.__completeContact=()=>resolve({type:'opaque',ok:false,status:0}));
+      }
+      return nativeFetch(input,options);
+    };
+  `});
   await send('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
   await navigate('#home');
   assert.equal(await evaluate(`document.querySelector('#main h1').textContent`), 'IT Consulting, Cybersecurity & Web Development');
@@ -115,15 +131,65 @@ async function checkLayout() {
   await screenshot('service-detail-desktop.png');
   await evaluate(`document.querySelector('.detail-action a').click()`);await delay(200);
   assert.ok(await evaluate(`document.querySelector('#message').value.includes(${JSON.stringify(details[0].title)})`));
-  await evaluate(`document.querySelector('#message').value=${JSON.stringify('Hello & thank you.\nA project inquiry.')}`);
-  await send('Runtime.evaluate',{expression:`document.querySelector('#message-form').requestSubmit()`,userGesture:true});
-  await delay(150);
-  const draft=await evaluate(`document.querySelector('#email-status a').href`);
-  const email=new URL(draft);
-  assert.equal(email.pathname,'christopher.scott.biz@gmail.com');
-  assert.equal(email.searchParams.get('body'),'Hello & thank you.\nA project inquiry.');
-  assert.ok(email.searchParams.get('subject').includes(details[0].title));
-  assert.ok(navigations.includes(draft),'Actual mailto navigation requested');
+  assert.equal(await evaluate(`document.querySelector('.email-display a').href`),'mailto:chris@christopher-scott.net');
+  assert.equal(await evaluate(`document.querySelector('.contact-page').textContent.includes('christopher.scott.biz@gmail.com')`),false);
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('#message-form label'),l=>l.textContent)`),['Email Address','Message']);
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').type`),'email');
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').autocomplete`),'email');
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').maxLength`),254);
+  assert.equal(await evaluate(`document.querySelector('[name=website]').hidden`),true);
+  await evaluate(`document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Email is required');
+  await evaluate(`document.querySelector('#visitor-email').value='not-an-email';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Invalid email blocked');
+  await evaluate(`document.querySelector('#visitor-email').value='visitor@example.com';document.querySelector('#message').value='short';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Minimum length enforced');
+  await evaluate(`document.querySelector('#message').value=' '.repeat(20);document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Whitespace-only message blocked');
+  await evaluate(`document.querySelector('#message').value='x'.repeat(5001);document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Maximum length enforced');
+  await evaluate(`document.querySelector('#message').value=${JSON.stringify('Hello & thank you.\nA project inquiry.')};document.querySelector('#message').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),1);
+  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),true);
+  await evaluate(`document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),1,'Duplicate submission blocked');
+  const submission=await evaluate(`window.__contactRequests[0]`);
+  assert.equal(submission.url,'https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec');
+  assert.equal(submission.method,'POST');assert.equal(submission.mode,'no-cors');
+  assert.deepEqual(submission.body.map(pair=>pair[0]),['email','message','website']);
+  const parameters=Object.fromEntries(submission.body);
+  assert.equal(parameters.email,'visitor@example.com');assert.equal(parameters.website,'');
+  assert.ok(parameters.message.includes(details[0].title),'Service context retained');
+  assert.ok(parameters.message.includes('Hello & thank you.\nA project inquiry.'));
+  await evaluate(`window.__completeContact()`);await delay(50);
+  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),false);
+  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Delivery could not be confirmed')`));
+  await route('#contact');
+  await evaluate(`document.querySelector('#visitor-email').value='visitor@example.com';document.querySelector('#message').value='x'.repeat(5000);document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),2,'5000-character message allowed');
+  await evaluate(`window.__completeContact()`);await delay(50);
+  await evaluate(`window.__contactMode='failure';document.querySelector('#message-form').requestSubmit()`);await delay(50);
+  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Unable to submit')`));
+  assert.equal(await evaluate(`document.querySelector('#message').value.length`),5000,'Message retained after failure');
+  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),false);
+  await evaluate(`window.__contactMode='http-failure';document.querySelector('#message-form').requestSubmit()`);await delay(50);
+  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Unable to submit')`));
+  const prior=await evaluate(`window.__contactRequests.length`);
+  await evaluate(`document.querySelector('[name=website]').value='spam.example';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate(`window.__contactRequests.length`),prior,'Honeypot blocks submission');
+  assert.equal(navigations.some(url=>url.startsWith('mailto:')),false,'Send Message never opens an email app');
+  await checkLayout();await screenshot('contact-desktop.png');
+  if(process.argv.includes('--contact-only')){
+    for(const width of [820,390,320]){
+      await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
+      await route('#contact');await checkLayout();
+      if(width===390) await screenshot('contact-mobile.png');
+    }
+    assert.deepEqual(errors,[],'No runtime or resource errors');
+    console.log('PASS: business email, accessible field order, exact mocked POST endpoint/parameters, service context, validation, duplicate prevention, honeypot and network/HTTP failure feedback.');
+    console.log('PASS: no mailto submission, desktop/tablet/mobile layout and no browser errors. No live request or email delivery was tested.');
+    return;
+  }
   await route('#services');
   const ids = await evaluate(`Array.from(document.querySelectorAll('.service-category'),section=>section.id)`);
   for (const id of ids) {
@@ -176,7 +242,7 @@ async function checkLayout() {
   assert.ok(fs.readFileSync(path.join(artifacts,'2025-06-30-self-host-next-js-with-docker-and-nginx.md'),'utf8').includes('slug: self-host-nextjs-with-docker-and-nginx'));
   await send('Page.navigate',{url:origin+'/#blog'});await until(()=>evaluate(`document.querySelector('.blog-post-summary')!==null`),'return from editor');
 
-  await route('#contact');assert.equal(await evaluate(`document.querySelector('.email-display a').href`),'mailto:christopher.scott.biz@gmail.com');await checkLayout();
+  await route('#contact');assert.equal(await evaluate(`document.querySelector('.email-display a').href`),'mailto:chris@christopher-scott.net');await checkLayout();
   // History uses actual in-page links and browser navigation.
   await evaluate(`document.querySelector('#primary-navigation a[href="#services"]').click()`);await delay(150);
   await evaluate('history.back()');await until(()=>evaluate('location.hash==="#contact"'),'history back');
@@ -209,7 +275,7 @@ async function checkLayout() {
     }
   }
   assert.deepEqual(errors,[],'No browser runtime or resource errors');
-  console.log('PASS: exact hero, 52 service details and email draft, resume content/credentials, Markdown Blog/RSS/editor, mailto Contact.');
+  console.log('PASS: exact hero, 52 service details and mocked Apps Script POST, resume content/credentials, Markdown Blog/RSS/editor, Apps Script Contact (delivery not tested).');
   console.log('PASS: direct routes, six category links, browser back/forward, mobile menu, Escape, keyboard skip link, print/PDF.');
   console.log('PASS: desktop 1440px, tablet 820px, phones 390px/320px; no horizontal overflow, runtime errors or failed resources.');
   console.log('Saved desktop/mobile screenshots and resume PDF in qa-artifacts/.');
