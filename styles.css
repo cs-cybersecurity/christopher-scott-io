@@ -320,6 +320,7 @@ main:focus { outline: none; }
 .email-display span { font-size: 12px; color: var(--muted); }
 .email-display a { font-size: clamp(16px, 2.8vw, 23px); overflow-wrap: anywhere; }
 #message-form label { display: block; font-weight: 600; margin-bottom: 10px; }
+#message-form input[type="email"] { display: block; width: 100%; padding: 16px; margin-bottom: 20px; background: var(--white); color: var(--ink); border: 1px solid #9c9da1; border-radius: 2px; line-height: 1.6; }
 textarea { width: 100%; resize: vertical; padding: 16px; background: var(--white); color: var(--ink); border: 1px solid #9c9da1; border-radius: 2px; line-height: 1.6; }
 .email-note, #email-status { font-size: 13px; margin: 12px 0 20px; }
 .service-context { border-left: 2px solid var(--line-strong); padding-left: 14px; font-size: 14px; }
