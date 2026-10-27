@@ -1,0 +1,43 @@
+[
+  {
+    "name": "CompTIA PenTest+",
+    "verification": "https://www.credly.com/badges/2699776b-71cd-4e0b-9555-fff6bf1adc36/public_url",
+    "image": "https://images.credly.com/images/c7ac176b-15a3-4726-827a-e8cee8fe44dc/linkedin_thumb_blob",
+    "file": "pentest.png"
+  },
+  {
+    "name": "CompTIA Project+",
+    "verification": "https://www.credly.com/badges/cb770a26-29b4-4a2c-9c26-67c8e0468e76/public_url",
+    "image": "https://images.credly.com/images/dbc9a5b0-1650-4b8d-a6a6-6dba09d09509/linkedin_thumb_blob",
+    "file": "project.png"
+  },
+  {
+    "name": "CompTIA Cybersecurity Analyst (CySA+)",
+    "verification": "https://www.credly.com/badges/431a39b6-151a-4eae-881f-2305379f3ded/public_url",
+    "image": "https://images.credly.com/images/dcd99b5b-da24-40a6-9364-62126d590c37/linkedin_thumb_blob",
+    "file": "cysa.png"
+  },
+  {
+    "name": "CompTIA Security+",
+    "verification": "https://www.credly.com/badges/47204e5c-df62-43d5-9898-79fbefc2c545/public_url",
+    "image": "https://images.credly.com/images/80d8a06a-c384-42bf-ad36-db81bce5adce/linkedin_thumb_blob",
+    "file": "security.png"
+  },
+  {
+    "name": "CompTIA Network+",
+    "verification": "https://www.credly.com/badges/77ff92db-e1b3-4efa-897a-3829fc4933ce/public_url",
+    "image": "https://images.credly.com/images/c70ba73e-3c8a-46fa-9d60-4a9af94ad662/linkedin_thumb_blob",
+    "file": "network.png"
+  },
+  {
+    "name": "CompTIA A+",
+    "verification": "https://www.credly.com/badges/fe2127c4-d6dd-4239-b334-b2ca596d7ba6/public_url",
+    "image": "https://images.credly.com/images/f6d62c5d-1e1d-4de6-92ee-8dc8c80b1c7b/linkedin_thumb_blob",
+    "file": "a-plus.png"
+  },
+  {
+    "name": "EC-Council issuer logo (not a credential-specific CEH badge)",
+    "image": "https://cdn.eccouncil.org/wp-content/uploads/2021/12/19104115/ec-council-white-logo.webp",
+    "file": "ec-council-issuer.webp"
+  }
+]
