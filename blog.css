@@ -10,6 +10,7 @@
 .blog-post-summary h2 a:hover { color:var(--accent); }
 .blog-post-summary p { max-width:750px; margin-bottom:16px; }
 .blog-article { max-width:850px; padding-bottom:60px; }
+.blog-article .breadcrumb { padding-top:32px; font-size:12px; color:var(--muted); }
 .blog-article .page-heading h1 { font-size:clamp(32px,4.2vw,52px); }
 .blog-article .page-heading { padding-top:28px; }
 .markdown-body { line-height:1.85; overflow-wrap:anywhere; }

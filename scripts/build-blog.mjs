@@ -6,13 +6,26 @@ import {marked} from 'marked';
 import sanitizeHtml from 'sanitize-html';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
-const context = {window: {}};
-vm.runInNewContext(fs.readFileSync(path.join(root, 'config.js'), 'utf8'), context);
-const site = new URL(context.window.SITE.url).href;
 const xml = text => String(text).replace(/[<>&"']/g, char => ({'<':'&lt;', '>':'&gt;', '&':'&amp;', '"':'&quot;', "'":'&apos;'}[char]));
 const safe = text => xml(text);
 
-export function parsePost(source, filename) {
+export function normalizeSiteURL(value) {
+  const url = new URL(value);
+  if (!['https:', 'http:'].includes(url.protocol) || url.username || url.password || url.search || url.hash) {
+    throw Error('SITE.url must be an absolute HTTP(S) website URL without credentials, query, or fragment.');
+  }
+  if (!url.pathname.endsWith('/')) url.pathname += '/';
+  return url.href;
+}
+
+export function readSiteURL(rootDirectory = root) {
+  const context = {window: {}};
+  vm.runInNewContext(fs.readFileSync(path.join(rootDirectory, 'config.js'), 'utf8'), context, {timeout: 1000});
+  return normalizeSiteURL(context.window.SITE?.url);
+}
+
+export function parsePost(source, filename, {siteURL = readSiteURL()} = {}) {
+  const site = normalizeSiteURL(siteURL);
   let body = source.replace(/^\uFEFF/, '').replace(/\r\n/g, '\n');
   const metadata = {};
   if (body.startsWith('---\n')) {
@@ -43,10 +56,12 @@ export function parsePost(source, filename) {
   body = body.replace(/!\[\[([^\]]+)\]\]/g, (_, name) => `<p class="blog-missing-image">Screenshot not included in the supplied files: ${safe(name)}</p>`);
   let html = marked.parse(body, {gfm: true, breaks: false});
   const headings = new Map();
+  const headingIDs = new Set();
   html = html.replace(/<h([1-6])>([\s\S]*?)<\/h\1>/g, (_, level, text) => {
     const base = text.replace(/<[^>]*>/g, '').toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-|-$/g, '') || 'section';
     const count = (headings.get(base) || 0) + 1; headings.set(base, count);
     const id = `post-${base}${count > 1 ? `-${count}` : ''}`;
+    headingIDs.add(id);
     const adjusted = Math.min(Number(level) + 1, 6);
     return `<h${adjusted} id="${id}">${text}</h${adjusted}>`;
   });
@@ -60,6 +75,12 @@ export function parsePost(source, filename) {
       img: (tag, attributes) => ({tagName:tag, attribs:{...attributes,loading:'lazy'}})
     }
   });
+  // Keep article anchors inside the existing hash router instead of leaving the post.
+  html = html.replace(/\bhref="#([^"]*)"/g, (match, fragment) => {
+    if (/^(?:home|resume|blog|contact)(?:\/|$)/.test(fragment)) return match;
+    const target = headingIDs.has(fragment) ? fragment : headingIDs.has(`post-${fragment}`) ? `post-${fragment}` : fragment;
+    return `href="#blog/${slug}/${target}"`;
+  });
   // RSS readers need absolute asset/link URLs rather than local document paths.
   const rssHTML = html.replace(/\b(href|src)="([^"]+)"/g, (match, attr, value) => {
     if (/^(https?:|mailto:)/i.test(value)) return match;
@@ -68,10 +89,12 @@ export function parsePost(source, filename) {
   return {slug, title, date, description, html, rssHTML, source: filename};
 }
 
-export function buildBlog() {
-  const directory = path.join(root, 'posts');
+export function buildBlog({rootDirectory = root, siteURL = readSiteURL(rootDirectory)} = {}) {
+  const site = normalizeSiteURL(siteURL);
+  const outputRoot = path.resolve(rootDirectory);
+  const directory = path.join(outputRoot, 'posts');
   fs.mkdirSync(directory, {recursive:true});
-  const posts = fs.readdirSync(directory).filter(name => /\.md$/i.test(name) && name.toLowerCase() !== 'readme.md').sort().map(name => parsePost(fs.readFileSync(path.join(directory,name),'utf8'),name)).filter(Boolean).sort((a,b) => b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug));
+  const posts = fs.readdirSync(directory).filter(name => /\.md$/i.test(name) && name.toLowerCase() !== 'readme.md').sort().map(name => parsePost(fs.readFileSync(path.join(directory,name),'utf8'),name, {siteURL: site})).filter(Boolean).sort((a,b) => b.date.localeCompare(a.date) || a.slug.localeCompare(b.slug));
   if (new Set(posts.map(post => post.slug)).size !== posts.length) throw Error('Duplicate blog slug; give each post a unique slug.');
   const json = JSON.stringify(posts.map(({rssHTML,...post})=>post), null, 2).replace(/</g,'\\u003c').replace(/\u2028/g,'\\u2028').replace(/\u2029/g,'\\u2029');
   const script = `// Generated from posts/*.md by npm run blog:build.\nwindow.BLOG_POSTS = ${json};\n`;
@@ -79,8 +102,8 @@ export function buildBlog() {
     const link = `${site}#blog/${post.slug}`;
     return `<item><title>${xml(post.title)}</title><link>${xml(link)}</link><guid isPermaLink="true">${xml(link)}</guid><pubDate>${new Date(post.date+'T12:00:00Z').toUTCString()}</pubDate><description>${xml(post.description)}</description><content:encoded>${xml(post.rssHTML)}</content:encoded></item>`;
   }).join('\n')}\n</channel></rss>\n`;
-  fs.writeFileSync(path.join(root,'blog-data.js'),script);
-  fs.writeFileSync(path.join(root,'rss.xml'),feed);
+  fs.writeFileSync(path.join(outputRoot,'blog-data.js'),script);
+  fs.writeFileSync(path.join(outputRoot,'rss.xml'),feed);
   return posts;
 }
 

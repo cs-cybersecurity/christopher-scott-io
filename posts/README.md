@@ -2,7 +2,7 @@
 
 This README is documentation and is excluded from the blog build.
 
-Use the local paste/import tool at http://localhost:3000/blog-editor.html, or create a `.md` file here with:
+Start the local paste/import tool with `npm run blog:editor` and open the localhost editor URL printed by the server, or create a `.md` file here with:
 
 ```text
 ---
@@ -17,7 +17,7 @@ Your Markdown content goes here.
 
 `title` and `date` are recommended. The slug defaults to the filename without its date prefix. Description is optional. Add `draft: true` to omit a work in progress from both the site and RSS feed. Supported metadata is this simple field format, not arbitrary YAML.
 
-Run `npm run blog:build` after adding or changing a file, then refresh the website. `npm start` also builds posts before starting the preview. Copying files into this folder does not publish a live site; deploy the generated assets with the website.
+Run `npm run blog:build` after adding or changing a file, then refresh the website. `npm start` and `npm run blog:editor` also build posts before starting the preview. Copying files into this folder does not publish a live site. See [BLOG_EDITOR.md](../BLOG_EDITOR.md) for the manual development-to-production workflow.
 
 To import a Markdown file from elsewhere:
 
@@ -31,4 +31,4 @@ Markdown supports headings, lists, links, blockquotes, tables, fenced code block
 
 The June 30, 2025 article includes all four supplied screenshots in `assets/blog/`. Its original prose is retained; the Obsidian embed references have been replaced with standard Markdown image links and descriptive alt text.
 
-Deploy `blog-data.js`, `blog.css`, and `rss.xml` alongside the existing website files. The feed URL is https://christopher-scott.net/rss.xml. Keep the RSS URL stable: subscriptions see new entries when the rebuilt feed is deployed. `blog-editor.html`, `blog-editor.js`, source notes, scripts and node_modules are local authoring tools and are not required for public hosting.
+`npm run blog:build` generates `blog-data.js` and `rss.xml`. The feed uses the configurable `SITE.url` in `config.js`, defaulting to this repository's GitHub Pages project path, not the original consulting website. `npm run build` prepares the public static files in `dist/` without editor internals, source notes, scripts, or dependencies. No command commits, pushes, merges, or deploys changes. Keep the RSS URL stable when hosting is configured.

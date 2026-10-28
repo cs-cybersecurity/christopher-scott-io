@@ -5,6 +5,7 @@
   $('post-date').value = `${now.getFullYear()}-${String(now.getMonth()+1).padStart(2,'0')}-${String(now.getDate()).padStart(2,'0')}`;
   $('post-file').addEventListener('change', async event => {
     const file = event.target.files[0]; if (!file) return;
+    $('post-editor').dataset.filename = file.name;
     let body = (await file.text()).replace(/^\uFEFF/,'').replace(/\r\n/g,'\n');
     $('post-title').value = file.name.replace(/\.md$/i,'').replace(/^\d+[\s-]+/,'').replace(/-/g,' ');
     $('post-description').value = '';
@@ -32,8 +33,10 @@
     const extra = event.target.dataset.extra;
     const content = `---\ntitle: ${JSON.stringify(title)}\ndate: ${date}\n${$('post-description').value ? `description: ${JSON.stringify($('post-description').value)}\n` : ''}${extra ? extra+'\n' : ''}---\n\n${$('post-body').value}`;
     const url = URL.createObjectURL(new Blob([content],{type:'text/markdown;charset=utf-8'}));
-    const link = document.createElement('a'); link.href=url; link.download=`${date}-${slug}.md`; link.click();
+    const importedName = event.target.dataset.filename;
+    const filename = importedName && /^[^/\\]+\.md$/i.test(importedName) ? importedName : `${date}-${slug}.md`;
+    const link = document.createElement('a'); link.href=url; link.download=filename; link.click();
     setTimeout(()=>URL.revokeObjectURL(url),1000);
-    $('editor-status').textContent = `Saved ${link.download}. Place it in posts/, run npm run blog:build, then deploy the updated blog-data.js and rss.xml with your site.`;
+    $('editor-status').textContent = `Saved ${link.download}. Place it in this project's posts/ folder (replace the original when editing), run npm run blog:build, and review locally. Publishing remains manual through dev and main.`;
   });
 })();

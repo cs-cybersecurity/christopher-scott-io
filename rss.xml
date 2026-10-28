@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <rss version="2.0" xmlns:atom="http://www.w3.org/2005/Atom" xmlns:content="http://purl.org/rss/1.0/modules/content/">
-<channel><title>Christopher Scott — Blog</title><link>https://christopher-scott.net/#blog</link><description>Technical writing by Christopher Scott.</description><language>en-us</language><atom:link href="https://christopher-scott.net/rss.xml" rel="self" type="application/rss+xml"/><lastBuildDate>Mon, 30 Jun 2025 12:00:00 GMT</lastBuildDate>
-<item><title>Self-Host Next.js with Docker and Nginx</title><link>https://christopher-scott.net/#blog/self-host-nextjs-with-docker-and-nginx</link><guid isPermaLink="true">https://christopher-scott.net/#blog/self-host-nextjs-with-docker-and-nginx</guid><pubDate>Mon, 30 Jun 2025 12:00:00 GMT</pubDate><description>A hands-on guide to self-hosting a Next.js application with Docker, Nginx, Cloudflare, and Let&apos;s Encrypt on a VPS.</description><content:encoded>&lt;p&gt;Vercel’s great for getting a Next.js app online fast, but if you’re looking to cut costs or take full control of your setup, self-hosting is the way to go. In this guide, I’ll walk you through spinning up a production-ready Next.js app on a VPS using Docker, and Nginx. In addition, I&apos;ll show you how to configure and automate Cloudflare SSL, and configure VPS Firewall settings.&lt;/p&gt;
+<channel><title>Christopher Scott — Blog</title><link>https://cs-cybersecurity.github.io/christopher-scott-io/#blog</link><description>Technical writing by Christopher Scott.</description><language>en-us</language><atom:link href="https://cs-cybersecurity.github.io/christopher-scott-io/rss.xml" rel="self" type="application/rss+xml"/><lastBuildDate>Mon, 30 Jun 2025 12:00:00 GMT</lastBuildDate>
+<item><title>Self-Host Next.js with Docker and Nginx</title><link>https://cs-cybersecurity.github.io/christopher-scott-io/#blog/self-host-nextjs-with-docker-and-nginx</link><guid isPermaLink="true">https://cs-cybersecurity.github.io/christopher-scott-io/#blog/self-host-nextjs-with-docker-and-nginx</guid><pubDate>Mon, 30 Jun 2025 12:00:00 GMT</pubDate><description>A hands-on guide to self-hosting a Next.js application with Docker, Nginx, Cloudflare, and Let&apos;s Encrypt on a VPS.</description><content:encoded>&lt;p&gt;Vercel’s great for getting a Next.js app online fast, but if you’re looking to cut costs or take full control of your setup, self-hosting is the way to go. In this guide, I’ll walk you through spinning up a production-ready Next.js app on a VPS using Docker, and Nginx. In addition, I&apos;ll show you how to configure and automate Cloudflare SSL, and configure VPS Firewall settings.&lt;/p&gt;
 &lt;h2 id=&quot;post-table-of-contents&quot;&gt;Table of Contents&lt;/h2&gt;
 &lt;ol&gt;
 &lt;li&gt;&lt;strong&gt;Dockerize Next.js app locally&lt;/strong&gt;&lt;/li&gt;
@@ -120,7 +120,7 @@ ufw enable
 &lt;h2 id=&quot;post-3-deploy-next-js-app-to-vps&quot;&gt;3. Deploy Next.js app to VPS&lt;/h2&gt;
 &lt;p&gt;&lt;a href=&quot;https://winscp.net/eng/download.php&quot; rel=&quot;noopener noreferrer&quot;&gt;Install WinSCP&lt;/a&gt; if you don&apos;t already have it, this will help visualize files, directories, and deploy to our server.&lt;/p&gt;
 &lt;p&gt;In WinSCP log into your server. Create &lt;code&gt;/website/&lt;/code&gt; directory under &lt;code&gt;/&lt;/code&gt;. Then drag and drop Next.js project files:&lt;/p&gt;
-&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/winscp-deployment.png&quot; alt=&quot;Transferring the Next.js project into the server website directory with WinSCP&quot; loading=&quot;lazy&quot; /&gt;
+&lt;p&gt;&lt;img src=&quot;https://cs-cybersecurity.github.io/christopher-scott-io/assets/blog/winscp-deployment.png&quot; alt=&quot;Transferring the Next.js project into the server website directory with WinSCP&quot; loading=&quot;lazy&quot; /&gt;
 &lt;em&gt;(Disclaimer) screenshot for demonstration, please don&apos;t copy unnecessary files over&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;Now test building your Next.js docker container on your VPS from the &lt;code&gt;/website/&lt;/code&gt; directory.&lt;/p&gt;
 &lt;pre&gt;&lt;code class=&quot;language-shell&quot;&gt;docker build -t my-nextjs-app .
@@ -162,8 +162,8 @@ sudo nginx -s reload
 &lt;p&gt;This guide assumes you&apos;re using Cloudflare.&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Configure DNS Records&lt;/strong&gt;&lt;/p&gt;
 &lt;p&gt;Ensure each domain has these two A records, specifying &lt;code&gt;www&lt;/code&gt; &amp;amp; &lt;code&gt;your-domain.com&lt;/code&gt;, with your origin server IP address. Ensure proxy status is enabled.&lt;/p&gt;
-&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/cloudflare-dns-example.png&quot; alt=&quot;Example Cloudflare DNS A records with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
-&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/cloudflare-dns-origin.png&quot; alt=&quot;Cloudflare DNS A records pointing to the VPS origin with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;
+&lt;p&gt;&lt;img src=&quot;https://cs-cybersecurity.github.io/christopher-scott-io/assets/blog/cloudflare-dns-example.png&quot; alt=&quot;Example Cloudflare DNS A records with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://cs-cybersecurity.github.io/christopher-scott-io/assets/blog/cloudflare-dns-origin.png&quot; alt=&quot;Cloudflare DNS A records pointing to the VPS origin with proxy status enabled&quot; loading=&quot;lazy&quot; /&gt;
 &lt;em&gt;(Informational) Cloudflare Dashboard &amp;gt; DNS &amp;gt; Records&lt;/em&gt;&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Enable SSL/TLS&lt;/strong&gt;&lt;/p&gt;
 &lt;p&gt;In Cloudflare, head to the &lt;em&gt;SSL/TLS &amp;gt; Overview&lt;/em&gt; settings and set your domain to &lt;em&gt;Automatic&lt;/em&gt; or &lt;em&gt;Flexible&lt;/em&gt;.&lt;/p&gt;
@@ -266,7 +266,7 @@ sudo nginx -s reload
 &lt;h2 id=&quot;post-5-configure-vps-firewall&quot;&gt;5. Configure VPS Firewall&lt;/h2&gt;
 &lt;p&gt;We’ve locked this site down with HTTPS, might as well show the firewall some love too. Every cloud provider’s a little different, so your mileage may vary, but the core idea stays the same.&lt;/p&gt;
 &lt;p&gt;First up, both the &lt;em&gt;Default Inbound&lt;/em&gt; and &lt;em&gt;Default Outbound&lt;/em&gt; policies are set to &lt;strong&gt;drop&lt;/strong&gt;. That means nothing gets in or out unless we explicitly say so. Every protocol, port, source, and destination has to earn its keep.&lt;/p&gt;
-&lt;p&gt;&lt;img src=&quot;https://christopher-scott.net/assets/blog/linode-firewall-rules.png&quot; alt=&quot;Linode inbound and outbound firewall rules with default drop policies&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
+&lt;p&gt;&lt;img src=&quot;https://cs-cybersecurity.github.io/christopher-scott-io/assets/blog/linode-firewall-rules.png&quot; alt=&quot;Linode inbound and outbound firewall rules with default drop policies&quot; loading=&quot;lazy&quot; /&gt;&lt;/p&gt;
 &lt;p&gt;&lt;strong&gt;Inbound Rules&lt;/strong&gt;&lt;/p&gt;
 &lt;ul&gt;
 &lt;li&gt;&lt;strong&gt;Allow SSH (TCP 22)&lt;/strong&gt;&lt;ul&gt;

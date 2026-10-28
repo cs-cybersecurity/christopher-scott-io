@@ -1,29 +1,31 @@
 'use strict';
 
-// Browser QA with the locally installed Chrome and native DevTools protocol.
-// No browser library or downloaded dependencies. Artifacts stay in qa-artifacts/.
+// Installed Chrome/Edge + native DevTools; no packages or browser downloads.
+// Contact requests are mocked and Google endpoints are blocked independently.
 const assert = require('node:assert/strict');
 const fs = require('node:fs');
 const path = require('node:path');
-const os = require('node:os');
-const {spawn} = require('node:child_process');
+const {pathToFileURL} = require('node:url');
+const {spawn, execFileSync} = require('node:child_process');
 const {setTimeout: delay} = require('node:timers/promises');
 const root = path.resolve(__dirname, '..');
 const artifacts = path.join(root, 'qa-artifacts');
 const origin = 'http://127.0.0.1:3000';
 const debugPort = 9237;
-const chromePath = [process.env.CHROME_PATH, 'C:/Program Files/Google/Chrome/Application/chrome.exe', 'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'].find(file => file && fs.existsSync(file));
+const browserPath = [process.env.CHROME_PATH,
+  'C:/Program Files/Google/Chrome/Application/chrome.exe',
+  'C:/Program Files (x86)/Microsoft/Edge/Application/msedge.exe'
+].find(file => file && fs.existsSync(file));
 const errors = [];
-const navigations = [];
-let server, chrome, socket;
-let sequence = 0;
 const requests = new Map();
+const temporaryPosts = [];
+let server, browser, socket, sequence = 0;
 
 async function until(action, message, timeout = 12000) {
   const start = Date.now();
   while (Date.now() - start < timeout) {
     try { const result = await action(); if (result) return result; } catch {}
-    await delay(100);
+    await delay(75);
   }
   throw Error(`Timeout: ${message}`);
 }
@@ -37,61 +39,188 @@ function send(method, params = {}) {
 }
 async function evaluate(expression) {
   const result = await send('Runtime.evaluate', {expression, returnByValue: true, awaitPromise: true});
-  if (result.exceptionDetails) throw Error(result.exceptionDetails.text);
+  if (result.exceptionDetails) throw Error(result.exceptionDetails.exception?.description || result.exceptionDetails.text);
   return result.result.value;
 }
-async function navigate(route) {
-  await send('Page.navigate', {url: `${origin}/${route}`});
-  await until(() => evaluate(`document.readyState === 'complete' && location.hash === ${JSON.stringify(route)}`), `navigate ${route}`);
-  await delay(150);
+const articleRoute = 'blog/self-host-nextjs-with-docker-and-nginx';
+const headings = {home: 'Engineering secure systems. Defending complex environments.', resume: 'Resume', blog:'Blog', contact: 'Get in Touch', [articleRoute]:'Self-Host Next.js with Docker and Nginx'};
+async function route(page, fresh = false) {
+  if (fresh) await send('Page.navigate', {url: `${origin}/#${page}`});
+  else await evaluate(`location.hash = ${JSON.stringify('#' + page)}`);
+  await until(() => evaluate(`document.readyState === 'complete' && location.hash === ${JSON.stringify('#' + page)} && document.querySelector('#main h1')?.textContent.trim() === ${JSON.stringify(headings[page])}`), `route ${page}`);
+  await delay(50);
 }
-async function route(route) {
-  await evaluate(`location.hash = ${JSON.stringify(route)}`);
-  await until(() => evaluate(`location.hash === ${JSON.stringify(route)} && document.querySelector('#main h1') !== null`), route);
-  await delay(150);
-}
-async function screenshot(name) {
-  const shot = await send('Page.captureScreenshot', {format:'png', captureBeyondViewport:false});
+async function screenshot(name, full = false) {
+  const options = {format: 'png', captureBeyondViewport: full};
+  if (full) {
+    const metrics = await send('Page.getLayoutMetrics');
+    options.clip = {...metrics.cssContentSize, scale: 1};
+  }
+  const shot = await send('Page.captureScreenshot', options);
   fs.writeFileSync(path.join(artifacts, name), Buffer.from(shot.data, 'base64'));
 }
-async function checkLayout() {
-  assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth + 1'), false, 'Horizontal overflow');
+async function checkLayout(page, width, height) {
+  assert.equal(await evaluate('document.documentElement.scrollWidth > innerWidth + 1'), false, `${page} at ${width}: horizontal overflow`);
   assert.equal(await evaluate(`document.querySelectorAll('#main h1').length`), 1, 'Exactly one page heading');
   assert.equal(await evaluate(`Array.from(document.querySelectorAll('a')).some(a => !a.getAttribute('href'))`), false, 'No empty links');
-  assert.equal(await evaluate(`Array.from(document.querySelectorAll('#main [aria-labelledby]')).some(e=>!document.getElementById(e.getAttribute('aria-labelledby')))`), false, 'Heading associations');
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('#main [aria-labelledby]')).some(e => e.getAttribute('aria-labelledby').split(/\\s+/).some(id => !document.getElementById(id)))`), false, 'Accessible heading references');
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('a[href^="#"]')).some(a => !['#home','#resume','#blog','#contact','#main'].includes(a.hash) && !a.hash.startsWith('#blog/'))`), false, 'Only public routes, articles and skip target');
+  assert.equal(await evaluate(`document.querySelector('#primary-navigation a[aria-current="page"]').hash`), '#' + page.split('/')[0]);
+  await evaluate(`document.querySelectorAll('img').forEach(img => img.loading = 'eager')`);
+  await until(() => evaluate(`Array.from(document.querySelectorAll('img')).every(img => img.complete && img.naturalWidth > 0)`), `${page} images at ${width}`);
+  if (page === 'home') {
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('.home-photo-frame img')).some(img => getComputedStyle(img).objectFit !== 'contain')`), false, 'Photographs preserve their full framing');
+    assert.equal(await evaluate(`Array.from(document.querySelectorAll('#main img')).some(img => /with-cat/i.test(img.src))`), false, 'Cat photograph is absent from the professional presentation');
+    if (width >= 1366) assert.ok(await evaluate(`document.querySelector('.intro-hero').getBoundingClientRect().bottom <= innerHeight + 1`), `Hero fits desktop first viewport at ${width} × ${height}`);
+  }
+}
+
+async function checkContact() {
+  await route('contact');
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('#message-form label'), label => label.textContent)`), ['Name', 'Email', 'Message']);
+  assert.equal(await evaluate(`document.querySelector('#visitor-name').autocomplete`), 'name');
+  assert.equal(await evaluate(`document.querySelector('#visitor-name').maxLength`), 120);
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').type`), 'email');
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').autocomplete`), 'email');
+  assert.equal(await evaluate(`document.querySelector('#visitor-email').maxLength`), 254);
+  assert.equal(await evaluate(`document.querySelector('[name=website]').hidden`), true);
+  assert.equal(await evaluate(`document.querySelector('#email-status').getAttribute('role')`), 'status');
+  assert.equal(await evaluate(`document.querySelector('a[href^="mailto:"]').href`), 'mailto:christopher.scott.biz@gmail.com');
+  assert.ok(await evaluate(`document.querySelector('.contact-page a[href="https://www.linkedin.com/in/cs-cybersecurity"]') !== null`));
+  assert.ok(await evaluate(`document.querySelector('.contact-page a[href="https://github.com/cs-cybersecurity"]') !== null`));
+  await evaluate(`document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Required fields block empty submissions');
+  await evaluate(`document.querySelector('#visitor-name').value='Visitor';document.querySelector('#visitor-email').value='invalid';document.querySelector('#message').value='A professional introduction.';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Invalid email is blocked');
+  await evaluate(`document.querySelector('#visitor-email').value='visitor@example.com';document.querySelector('#message').value='short';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Short message is blocked');
+  const submitEvent = `document.querySelector('#message-form').dispatchEvent(new Event('submit', {bubbles:true,cancelable:true}))`;
+  await evaluate(`document.querySelector('#message').value=' '.repeat(20);${submitEvent}`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Whitespace-only message is blocked');
+  await evaluate(`document.querySelector('#visitor-name').value=' '.repeat(5);document.querySelector('#message').value='A professional introduction.';${submitEvent}`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Whitespace-only name is blocked');
+  await evaluate(`document.querySelector('#visitor-name').value='Visitor';document.querySelector('#message').value='x'.repeat(5001);${submitEvent}`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Overlong message is blocked');
+  await evaluate(`document.querySelector('#message').value='x'.repeat(5000);${submitEvent}`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 0, 'Combined name and message length is bounded');
+  const message = 'Hello & thank you.\nA professional introduction.';
+  await evaluate(`document.querySelector('#visitor-name').value='  Visitor   Example  ';document.querySelector('#visitor-name').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#message').value=${JSON.stringify(message)};document.querySelector('#message').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), 1);
+  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`), true);
+  assert.equal(await evaluate(`document.querySelector('#message-form').getAttribute('aria-busy')`), 'true');
+  await evaluate(submitEvent);
+  assert.equal(await evaluate('window.__contactRequests.length'), 1, 'Duplicate submission prevented');
+  const submission = await evaluate('window.__contactRequests[0]');
+  assert.equal(submission.url, 'https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec');
+  assert.equal(submission.method, 'POST');
+  assert.equal(submission.mode, 'no-cors');
+  assert.equal(submission.credentials, 'omit');
+  assert.deepEqual(submission.body.map(pair => pair[0]), ['email', 'message', 'website']);
+  assert.deepEqual(Object.fromEntries(submission.body), {email:'visitor@example.com', message:`Name: Visitor Example\n\n${message}`, website:''});
+  await evaluate('window.__completeContact()');
+  await until(() => evaluate(`!document.querySelector('#message-form button').disabled`), 'contact completion');
+  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Delivery could not be confirmed')`), 'Opaque response does not claim delivery');
+  assert.equal(await evaluate(`document.querySelector('#message-form').hasAttribute('aria-busy')`), false);
+  for (const mode of ['failure', 'http-failure', 'abort']) {
+    await evaluate(`window.__contactMode=${JSON.stringify(mode)};document.querySelector('#message-form').requestSubmit()`);
+    await until(() => evaluate(`!document.querySelector('#message-form button').disabled && document.querySelector('#email-status').textContent !== 'Submitting your message…'`), mode);
+    assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes(${JSON.stringify(mode === 'abort' ? 'timed out' : 'Unable to submit')})`), `${mode} feedback`);
+    assert.equal(await evaluate(`document.querySelector('#message').value`), message, 'Draft retained after failed submission');
+  }
+  const prior = await evaluate('window.__contactRequests.length');
+  await evaluate(`document.querySelector('[name=website]').value='spam.example';document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), prior, 'Honeypot blocks submission');
+  await evaluate(`document.querySelector('[name=website]').value='';window.__contactMode='pending';document.querySelector('#visitor-name').value='Visitor Example';document.querySelector('#message').value='x'.repeat(5000 - ('Name: Visitor Example\\n\\n').length);document.querySelector('#message').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#message-form').requestSubmit()`);
+  assert.equal(await evaluate('window.__contactRequests.length'), prior + 1, 'Combined 5,000-character boundary accepted');
+  assert.equal(await evaluate(`Object.fromEntries(window.__contactRequests.at(-1).body).message.length`), 5000);
+  await evaluate('window.__completeContact()');
+  await until(() => evaluate(`!document.querySelector('#message-form button').disabled`), 'boundary submission completion');
+}
+
+async function checkEditor() {
+  const downloads = fs.mkdtempSync(path.join(artifacts, 'editor-downloads-'));
+  await send('Browser.setDownloadBehavior', {behavior:'allow',downloadPath:downloads});
+  const openEditor = async () => {
+    await send('Page.navigate', {url:pathToFileURL(path.join(root,'blog-editor.html')).href});
+    await until(() => evaluate(`document.readyState === 'complete' && document.querySelector('#post-editor') !== null`), 'local editor');
+  };
+  const importFile = async file => {
+    const doc = await send('DOM.getDocument');
+    const input = await send('DOM.querySelector', {nodeId:doc.root.nodeId,selector:'#post-file'});
+    await send('DOM.setFileInputFiles', {nodeId:input.nodeId,files:[file]});
+    await until(() => evaluate(`document.querySelector('#editor-status').textContent.startsWith('File loaded.')`), 'Markdown import');
+  };
+  await openEditor();
+  const originalName = '2025-06-30-self-host-nextjs-with-docker-and-nginx.md';
+  await importFile(path.join(root, 'posts', originalName));
+  assert.equal(await evaluate(`document.querySelector('#post-title').value`), 'Self-Host Next.js with Docker and Nginx');
+  assert.equal(await evaluate(`document.querySelector('#post-date').value`), '2025-06-30');
+  assert.ok(await evaluate(`document.querySelector('#post-body').value.includes('docker build -t my-nextjs-app .')`));
+  await evaluate(`document.querySelector('#post-editor').requestSubmit()`);
+  await until(() => fs.existsSync(path.join(downloads,originalName)), 'existing article download preserves filename');
+  assert.ok(fs.readFileSync(path.join(downloads,originalName),'utf8').includes('slug: self-host-nextjs-with-docker-and-nginx'));
+
+  await openEditor();
+  await evaluate(`document.querySelector('#post-title').value='Local editor QA check';document.querySelector('#post-date').value='2026-10-27';document.querySelector('#post-description').value='Temporary local QA article.';document.querySelector('#post-body').value='# Preview heading\\n\\n**Working preview.**\\n\\n![Image](assets/blog/cloudflare-dns-example.png)';document.querySelector('#post-editor').requestSubmit()`);
+  const filename = '2026-10-27-local-editor-qa-check.md';
+  await until(() => fs.existsSync(path.join(downloads,filename)), 'new Markdown download');
+  const destination = path.join(root,'posts',filename);
+  assert.equal(fs.existsSync(destination), false, 'Temporary article cannot overwrite an existing post');
+  fs.copyFileSync(path.join(downloads,filename),destination,fs.constants.COPYFILE_EXCL);
+  temporaryPosts.push(destination);
+  execFileSync(process.execPath, ['scripts/build-blog.mjs'], {cwd:root});
+  headings['blog/local-editor-qa-check'] = 'Local editor QA check';
+  await route('blog/local-editor-qa-check',true);
+  assert.equal(await evaluate(`document.querySelector('.markdown-body strong').textContent`), 'Working preview.');
+  await evaluate(`document.querySelector('.markdown-body img').loading='eager'`);
+  await until(() => evaluate(`document.querySelector('.markdown-body img').naturalWidth > 0`), 'new post image');
+  await screenshot('editor-created-post-preview.png');
+
+  const draftFile = path.join(downloads,'2026-10-27-local-editor-qa-draft.md');
+  fs.writeFileSync(draftFile,'---\ntitle: QA draft\ndate: 2026-10-27\nslug: local-editor-qa-draft\ndraft: true\n---\n\nPrivate draft text.');
+  await openEditor();await importFile(draftFile);
+  const draftDownloads = fs.mkdtempSync(path.join(artifacts,'draft-downloads-'));
+  await send('Browser.setDownloadBehavior', {behavior:'allow',downloadPath:draftDownloads});
+  await evaluate(`document.querySelector('#post-editor').requestSubmit()`);
+  const savedDraft = path.join(draftDownloads,path.basename(draftFile));
+  await until(() => fs.existsSync(savedDraft), 'draft round-trip download');
+  assert.ok(fs.readFileSync(savedDraft,'utf8').includes('draft: true'));
+  const draftDestination = path.join(root,'posts',path.basename(draftFile));
+  fs.copyFileSync(savedDraft,draftDestination,fs.constants.COPYFILE_EXCL);temporaryPosts.push(draftDestination);
+  execFileSync(process.execPath, ['scripts/build-blog.mjs'], {cwd:root});
+  await route('blog',true);
+  assert.equal(await evaluate(`BLOG_POSTS.some(p=>p.slug === 'local-editor-qa-draft')`), false, 'Draft never published');
+  await openEditor();await screenshot('local-blog-editor.png');
 }
 
 (async () => {
-  assert.ok(chromePath, 'A local Chrome or Edge installation is needed');
+  assert.ok(browserPath, 'A local Chrome or Edge installation is needed');
   fs.mkdirSync(artifacts, {recursive:true});
-  // Refuse to reuse an unknown server or debugging port.
   for (const url of [origin, `http://127.0.0.1:${debugPort}/json/version`]) {
     let occupied = false;
     try { await fetch(url); occupied = true; } catch {}
     assert.equal(occupied, false, `Port already in use: ${url}`);
   }
-  server = spawn(process.execPath, ['server.js'], {cwd:root, windowsHide:true, stdio:'ignore'});
-  await until(async () => (await fetch(origin)).status === 200, 'local server');
-  const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'christopher-site-browser-'));
-  chrome = spawn(chromePath, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--disable-default-apps', '--no-first-run', '--no-default-browser-check', `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, 'about:blank'], {windowsHide:true, stdio:'ignore'});
-  const target = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(page => page.type==='page'), 'Chrome DevTools');
+  server = spawn(process.execPath, ['server.js','--editor'], {cwd:root, windowsHide:true, stdio:'ignore'});
+  await until(async () => (await fetch(origin)).status === 200, 'local preview');
+  const profile = fs.mkdtempSync(path.join(artifacts, 'browser-profile-'));
+  browser = spawn(browserPath, ['--headless=new', '--disable-gpu', '--disable-background-networking', '--disable-default-apps', '--no-first-run', '--no-default-browser-check', `--remote-debugging-port=${debugPort}`, '--remote-debugging-address=127.0.0.1', `--user-data-dir=${profile}`, 'about:blank'], {windowsHide:true, stdio:'ignore'});
+  const target = await until(async () => (await (await fetch(`http://127.0.0.1:${debugPort}/json/list`)).json()).find(page => page.type === 'page'), 'browser DevTools');
   socket = new WebSocket(target.webSocketDebuggerUrl);
-  await new Promise((resolve,reject)=>{socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
+  await new Promise((resolve,reject) => {socket.addEventListener('open',resolve,{once:true});socket.addEventListener('error',reject,{once:true});});
   socket.addEventListener('message', event => {
     const data = JSON.parse(String(event.data));
     if (data.id && requests.has(data.id)) {
       const request = requests.get(data.id);requests.delete(data.id);clearTimeout(request.timer);
       if (data.error) request.reject(Error(JSON.stringify(data.error))); else request.resolve(data.result);
     }
-    if(data.method === 'Page.frameRequestedNavigation') navigations.push(data.params.url);
     if (data.method === 'Runtime.exceptionThrown') errors.push(data.params.exceptionDetails);
     if (data.method === 'Log.entryAdded' && data.params.entry.level === 'error') errors.push(data.params.entry);
     if (data.method === 'Network.responseReceived' && data.params.response.status >= 400) errors.push(data.params.response);
   });
   await send('Page.enable');await send('Runtime.enable');await send('Log.enable');await send('Network.enable');
-  // Contact tests never send a live email. Block the endpoint as a second safeguard.
-  await send('Network.setBlockedURLs',{urls:['*://script.google.com/*','*://script.googleusercontent.com/*']});
-  await send('Page.addScriptToEvaluateOnNewDocument',{source:`
+  await send('Network.setBlockedURLs', {urls:['*://script.google.com/*','*://script.googleusercontent.com/*']});
+  await send('Page.addScriptToEvaluateOnNewDocument', {source:`
     window.__contactRequests=[];
     window.__contactMode='pending';
     const nativeFetch=window.fetch.bind(window);
@@ -100,187 +229,89 @@ async function checkLayout() {
         window.__contactRequests.push({url:String(input),method:options.method,mode:options.mode,credentials:options.credentials,body:Array.from(options.body.entries())});
         if(window.__contactMode==='failure') return Promise.reject(new TypeError('Simulated offline connection'));
         if(window.__contactMode==='http-failure') return Promise.resolve({type:'basic',ok:false,status:500});
+        if(window.__contactMode==='abort') return Promise.reject(new DOMException('Simulated timeout','AbortError'));
         return new Promise(resolve=>window.__completeContact=()=>resolve({type:'opaque',ok:false,status:0}));
       }
       return nativeFetch(input,options);
     };
   `});
-  await send('Emulation.setDeviceMetricsOverride', {width:1440,height:1000,deviceScaleFactor:1,mobile:false});
-  await navigate('#home');
-  assert.equal(await evaluate(`document.querySelector('#main h1').textContent`), 'IT Consulting, Cybersecurity & Web Development');
-  assert.equal(await evaluate(`document.querySelector('.hero-description').textContent`), 'Expert technology services to build, secure, and modernize your business. From custom web applications and cloud infrastructure to cybersecurity assessments and compliance, we deliver practical solutions for growing organizations.');
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('#primary-navigation a'),a=>a.textContent)`), ['Home','Services','Resume','Blog','Contact']);
-  assert.equal(await evaluate(`document.querySelector('.services-overview').children.length`),6);
-  await checkLayout();await screenshot('home-desktop.png');
-  await route('#services');
-  assert.equal(await evaluate(`document.querySelectorAll('.service-list li').length`),52);
-  assert.equal(await evaluate(`CATALOG.slice(1).every((c,i)=>c.items.every((item,j)=>item.title===CONTENT.services[i].items[j].title))`),true);
-  const details=await evaluate(`CATALOG.flatMap(c=>c.items.map(item=>({url:'#services/'+c.id+'/'+item.id,title:item.title})))`);
-  assert.equal(new Set(details.map(d=>d.url)).size,52);
-  for(const detail of details){
-    await route(detail.url);
-    assert.equal(await evaluate(`document.querySelector('#main h1').textContent`),detail.title);
-    assert.equal(await evaluate(`document.querySelector('.detail-action a').textContent`),'Book a Consultation');
-    assert.equal(await evaluate(`document.querySelectorAll('.service-detail li').length`),3);
-    assert.equal(await evaluate(`document.querySelector('.detail-overview').textContent.endsWith('\u2026')`),false);
-    await checkLayout();
-  }
-  await navigate(details[0].url);
-  await send('Page.reload');await delay(250);
-  assert.equal(await evaluate(`document.querySelector('#main h1').textContent`),details[0].title);
-  await screenshot('service-detail-desktop.png');
-  await evaluate(`document.querySelector('.detail-action a').click()`);await delay(200);
-  assert.ok(await evaluate(`document.querySelector('#message').value.includes(${JSON.stringify(details[0].title)})`));
-  assert.equal(await evaluate(`document.querySelector('.email-display a').href`),'mailto:chris@christopher-scott.net');
-  assert.equal(await evaluate(`document.querySelector('.contact-page').textContent.includes('christopher.scott.biz@gmail.com')`),false);
-  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('#message-form label'),l=>l.textContent)`),['Email Address','Message']);
-  assert.equal(await evaluate(`document.querySelector('#visitor-email').type`),'email');
-  assert.equal(await evaluate(`document.querySelector('#visitor-email').autocomplete`),'email');
-  assert.equal(await evaluate(`document.querySelector('#visitor-email').maxLength`),254);
-  assert.equal(await evaluate(`document.querySelector('[name=website]').hidden`),true);
-  await evaluate(`document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Email is required');
-  await evaluate(`document.querySelector('#visitor-email').value='not-an-email';document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Invalid email blocked');
-  await evaluate(`document.querySelector('#visitor-email').value='visitor@example.com';document.querySelector('#message').value='short';document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Minimum length enforced');
-  await evaluate(`document.querySelector('#message').value=' '.repeat(20);document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Whitespace-only message blocked');
-  await evaluate(`document.querySelector('#message').value='x'.repeat(5001);document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),0,'Maximum length enforced');
-  await evaluate(`document.querySelector('#message').value=${JSON.stringify('Hello & thank you.\nA project inquiry.')};document.querySelector('#message').dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),1);
-  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),true);
-  await evaluate(`document.querySelector('#message-form').dispatchEvent(new Event('submit',{bubbles:true,cancelable:true}))`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),1,'Duplicate submission blocked');
-  const submission=await evaluate(`window.__contactRequests[0]`);
-  assert.equal(submission.url,'https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec');
-  assert.equal(submission.method,'POST');assert.equal(submission.mode,'no-cors');
-  assert.deepEqual(submission.body.map(pair=>pair[0]),['email','message','website']);
-  const parameters=Object.fromEntries(submission.body);
-  assert.equal(parameters.email,'visitor@example.com');assert.equal(parameters.website,'');
-  assert.ok(parameters.message.includes(details[0].title),'Service context retained');
-  assert.ok(parameters.message.includes('Hello & thank you.\nA project inquiry.'));
-  await evaluate(`window.__completeContact()`);await delay(50);
-  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),false);
-  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Delivery could not be confirmed')`));
-  await route('#contact');
-  await evaluate(`document.querySelector('#visitor-email').value='visitor@example.com';document.querySelector('#message').value='x'.repeat(5000);document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),2,'5000-character message allowed');
-  await evaluate(`window.__completeContact()`);await delay(50);
-  await evaluate(`window.__contactMode='failure';document.querySelector('#message-form').requestSubmit()`);await delay(50);
-  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Unable to submit')`));
-  assert.equal(await evaluate(`document.querySelector('#message').value.length`),5000,'Message retained after failure');
-  assert.equal(await evaluate(`document.querySelector('#message-form button').disabled`),false);
-  await evaluate(`window.__contactMode='http-failure';document.querySelector('#message-form').requestSubmit()`);await delay(50);
-  assert.ok(await evaluate(`document.querySelector('#email-status').textContent.includes('Unable to submit')`));
-  const prior=await evaluate(`window.__contactRequests.length`);
-  await evaluate(`document.querySelector('[name=website]').value='spam.example';document.querySelector('#message-form').requestSubmit()`);
-  assert.equal(await evaluate(`window.__contactRequests.length`),prior,'Honeypot blocks submission');
-  assert.equal(navigations.some(url=>url.startsWith('mailto:')),false,'Send Message never opens an email app');
-  await checkLayout();await screenshot('contact-desktop.png');
-  if(process.argv.includes('--contact-only')){
-    for(const width of [820,390,320]){
-      await send('Emulation.setDeviceMetricsOverride',{width,height:1000,deviceScaleFactor:1,mobile:false});
-      await route('#contact');await checkLayout();
-      if(width===390) await screenshot('contact-mobile.png');
+  for (const [width,height] of [[1920,1080],[1440,900],[1366,768],[768,1024],[390,844]]) {
+    await send('Emulation.setDeviceMetricsOverride', {width,height,deviceScaleFactor:1,mobile:false});
+    for (const page of ['home','resume','blog',articleRoute,'contact']) {
+      await route(page, true);
+      await checkLayout(page,width,height);
+      await screenshot(`${page.replaceAll('/','-')}-${width}x${height}.png`);
+      if (page === 'home' && [1440,390].includes(width)) await screenshot(`home-${width}-full.png`, true);
     }
-    assert.deepEqual(errors,[],'No runtime or resource errors');
-    console.log('PASS: business email, accessible field order, exact mocked POST endpoint/parameters, service context, validation, duplicate prevention, honeypot and network/HTTP failure feedback.');
-    console.log('PASS: no mailto submission, desktop/tablet/mobile layout and no browser errors. No live request or email delivery was tested.');
-    return;
   }
-  await route('#services');
-  const ids = await evaluate(`Array.from(document.querySelectorAll('.service-category'),section=>section.id)`);
-  for (const id of ids) {
-    await route(`#services/${id}`);
-    assert.equal(await evaluate(`document.activeElement.id`),id,'Category target receives keyboard focus');
-    assert.ok(await evaluate(`document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top >= 0 && document.getElementById(${JSON.stringify(id)}).getBoundingClientRect().top < innerHeight - 100`),'Category heading in view');
-  }
-  await navigate('#services/compliance-audit');await checkLayout();await screenshot('services-desktop.png');
-  await route('#resume');
+  await send('Emulation.setDeviceMetricsOverride', {width:1440,height:900,deviceScaleFactor:1,mobile:false});
+  await route('home');
+  assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('#primary-navigation a'),a=>a.textContent)`), ['Home','Resume','Blog','Contact']);
+  assert.equal(await evaluate(`document.querySelector('#home-certification-list strong').textContent`), 'Certified Ethical Hacker (CEH)');
+  assert.equal(await evaluate(`document.querySelectorAll('.home-credential').length`), 7);
+  assert.equal(await evaluate(`document.querySelector('.hero-social a[aria-label="GitHub"]').href`), 'https://github.com/cs-cybersecurity');
+  assert.equal(await evaluate(`document.querySelector('.hero-social a[aria-label="LinkedIn"]').href`), 'https://www.linkedin.com/in/cs-cybersecurity');
+  await evaluate(`document.querySelector('.intro-hero a[href="#resume"]').click()`);
+  await until(() => evaluate(`document.querySelector('#print-resume') !== null`), 'View Resume action');
   assert.deepEqual(await evaluate(`Array.from(document.querySelectorAll('.resume-section > h2'),h=>h.textContent)`), ['Experience','Education','Licenses & Certifications']);
-  assert.equal(await evaluate(`document.querySelectorAll('.resume-role').length`),11);
-  assert.equal(await evaluate(`document.querySelectorAll('.education-entry').length`),2);
-  assert.equal(await evaluate(`document.querySelectorAll('.certification-entry').length`),7);
-  assert.equal(await evaluate(`CONTENT.resume.experience.every((group,i)=>{const e=document.querySelectorAll('.experience-group')[i];return (!group.grouped || e.querySelector('h3').textContent===group.employer) && group.roles.every((r,j)=>{const role=e.querySelectorAll('.resume-role')[j];return role.querySelector('h4').textContent===r.title && JSON.stringify(Array.from(role.querySelectorAll('.entry-meta'),p=>p.textContent))===JSON.stringify(r.meta) && JSON.stringify(Array.from(role.querySelectorAll('.entry-description'),p=>p.textContent))===JSON.stringify(r.description);});})`),true,'Rendered experience fidelity');
-  assert.equal(await evaluate(`CONTENT.resume.certifications.every((c,i)=>document.querySelectorAll('.certification-entry a')[i].href===c.url)`),true,'Exact credential URLs');
-  await checkLayout();await screenshot('resume-desktop.png');
-  await send('Emulation.setEmulatedMedia',{media:'print'});
-  assert.equal(await evaluate(`getComputedStyle(document.querySelector('#print-resume')).display`),'none');
-  const pdf=await send('Page.printToPDF',{printBackground:false,preferCSSPageSize:true});fs.writeFileSync(path.join(artifacts,'resume.pdf'),Buffer.from(pdf.data,'base64'));
-  await send('Emulation.setEmulatedMedia',{media:''});
-  await route('#blog');
-  assert.equal(await evaluate(`document.querySelector('.blog-post-summary time').getAttribute('datetime')`),'2025-06-30');
-  assert.equal(await evaluate(`document.querySelector('link[type="application/rss+xml"]').getAttribute('href')`),'rss.xml');
-  assert.ok(await evaluate(`document.querySelector('.blog-post-summary h2').textContent.includes('Self-Host Next.js')`));
-  await checkLayout(); await screenshot('blog-desktop.png');
-  await evaluate(`document.querySelector('.blog-post-summary h2 a').click()`);await delay(150);
-  assert.equal(await evaluate(`document.querySelector('#main h1').textContent`),'Self-Host Next.js with Docker and Nginx');
-  assert.ok(await evaluate(`document.querySelectorAll('.markdown-body pre').length > 15`));
-  assert.equal(await evaluate(`document.querySelectorAll('.blog-missing-image').length`),0);
-  assert.ok(await evaluate(`document.title.startsWith('Self-Host Next.js')`));
-  assert.equal(await evaluate(`document.querySelectorAll('.markdown-body img').length`),4);
-  await evaluate(`document.querySelectorAll('.markdown-body img').forEach(img=>img.loading='eager')`);
-  await until(()=>evaluate(`Array.from(document.querySelectorAll('.markdown-body img')).every(img=>img.complete && img.naturalWidth>0)`),'four blog screenshots loaded');
-  await checkLayout();await screenshot('blog-post-desktop.png');
-  await evaluate('history.back()');await until(()=>evaluate(`location.hash==='#blog'`),'blog back');
-  await evaluate('history.forward()');await until(()=>evaluate(`document.querySelector('.markdown-body')!==null`),'blog forward');
-  await send('Page.reload');await delay(200);assert.ok(await evaluate(`document.querySelector('.markdown-body')!==null`));
-  const rss=await fetch(origin+'/rss.xml');assert.equal(rss.status,200);assert.ok(rss.headers.get('content-type').includes('application/rss+xml'));
-  await send('Page.navigate',{url:origin+'/blog-editor.html'});
-  await until(()=>evaluate(`document.querySelector('#post-file')!==null`),'local editor');
-  const {root:dom}=await send('DOM.getDocument');
-  const input=await send('DOM.querySelector',{nodeId:dom.nodeId,selector:'#post-file'});
-  await send('DOM.setFileInputFiles',{nodeId:input.nodeId,files:[path.join(root,'posts/2025-06-30-self-host-nextjs-with-docker-and-nginx.md')]});
-  await until(()=>evaluate(`document.querySelector('#post-title').value==='Self-Host Next.js with Docker and Nginx'`),'Markdown import');
-  assert.equal(await evaluate(`document.querySelector('#post-date').value`),'2025-06-30');
-  assert.ok(await evaluate(`document.querySelector('#post-body').value.includes('docker build -t my-nextjs-app .')`));
-  await send('Browser.setDownloadBehavior',{behavior:'allow',downloadPath:artifacts});
-  await evaluate(`document.querySelector('#post-editor').requestSubmit()`);
-  await until(()=>fs.existsSync(path.join(artifacts,'2025-06-30-self-host-next-js-with-docker-and-nginx.md')),'saved Markdown download');
-  assert.ok(fs.readFileSync(path.join(artifacts,'2025-06-30-self-host-next-js-with-docker-and-nginx.md'),'utf8').includes('slug: self-host-nextjs-with-docker-and-nginx'));
-  await send('Page.navigate',{url:origin+'/#blog'});await until(()=>evaluate(`document.querySelector('.blog-post-summary')!==null`),'return from editor');
-
-  await route('#contact');assert.equal(await evaluate(`document.querySelector('.email-display a').href`),'mailto:chris@christopher-scott.net');await checkLayout();
-  // History uses actual in-page links and browser navigation.
-  await evaluate(`document.querySelector('#primary-navigation a[href="#services"]').click()`);await delay(150);
-  await evaluate('history.back()');await until(()=>evaluate('location.hash==="#contact"'),'history back');
-  await evaluate('history.forward()');await until(()=>evaluate('location.hash==="#services"'),'history forward');
-  await navigate('#resume');assert.equal(await evaluate(`document.querySelector('#main h1').textContent`),'Resume');
-  // Tablet and small phones, including every long-content view.
-  for (const width of [820,390,320]) {
-    await send('Emulation.setDeviceMetricsOverride',{width,height:900,deviceScaleFactor:1,mobile:false});
-    for (const page of ['home','services','resume','blog','blog/self-host-nextjs-with-docker-and-nginx','contact','services/compliance-audit/international-organization-for-standardization-iso-27001']) {await route(`#${page}`);await checkLayout();}
-    if (width===390) {
-      await route('#home');await screenshot('home-mobile.png');
-      assert.equal(await evaluate(`getComputedStyle(document.querySelector('#primary-navigation')).display`),'none');
-      await evaluate(`document.querySelector('.menu-toggle').click()`);
-      assert.equal(await evaluate(`document.querySelector('.menu-toggle').getAttribute('aria-expanded')`),'true');
-      assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('#primary-navigation')).display`),'none');
-      await evaluate(`document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
-      assert.equal(await evaluate(`document.querySelector('.menu-toggle').getAttribute('aria-expanded')`),'false');
-      // Use a real tab sequence for the skip link.
-      await send('Page.navigate',{url:`${origin}/?keyboard-check#home`});
-      await until(()=>evaluate(`location.search === '?keyboard-check' && document.readyState === 'complete' && document.activeElement === document.body`),'fresh document for keyboard test');
-      await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-      await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
-      assert.equal(await evaluate(`document.activeElement.className`),'skip-link');
-      await send('Input.dispatchKeyEvent',{type:'keyDown',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
-      await send('Input.dispatchKeyEvent',{type:'keyUp',key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
-      assert.equal(await evaluate('document.activeElement.id'),'main');
-      await route('#blog/self-host-nextjs-with-docker-and-nginx');await screenshot('blog-post-mobile.png');
-      await route('#services');await screenshot('services-mobile.png');
-      await route('#resume');await screenshot('resume-mobile.png');
-    }
-  }
-  assert.deepEqual(errors,[],'No browser runtime or resource errors');
-  console.log('PASS: exact hero, 52 service details and mocked Apps Script POST, resume content/credentials, Markdown Blog/RSS/editor, Apps Script Contact (delivery not tested).');
-  console.log('PASS: direct routes, six category links, browser back/forward, mobile menu, Escape, keyboard skip link, print/PDF.');
-  console.log('PASS: desktop 1440px, tablet 820px, phones 390px/320px; no horizontal overflow, runtime errors or failed resources.');
-  console.log('Saved desktop/mobile screenshots and resume PDF in qa-artifacts/.');
-})().catch(error=>{console.error(error);process.exitCode=1;}).finally(async()=>{
-  if(socket?.readyState===WebSocket.OPEN){try{await send('Browser.close');}catch{}socket.close();}
-  for(const request of requests.values()){clearTimeout(request.timer);request.reject(Error('Browser closed'));}
-  if(chrome&&!chrome.killed)chrome.kill();if(server&&!server.killed)server.kill();
+  assert.equal(await evaluate(`document.querySelectorAll('.resume-role').length`), 11);
+  assert.equal(await evaluate(`document.querySelectorAll('.education-entry').length`), 2);
+  assert.equal(await evaluate(`document.querySelectorAll('.certification-entry').length`), 7);
+  assert.equal(await evaluate(`CONTENT.resume.experience.every((group,i)=>{const e=document.querySelectorAll('.experience-group')[i];return e.querySelector('h3').textContent===group.employer && JSON.stringify(Array.from(e.querySelector('.employer-header').querySelectorAll('.entry-meta'),p=>p.textContent))===JSON.stringify(group.meta) && group.roles.every((r,j)=>{const role=e.querySelectorAll('.resume-role')[j];return role.querySelector('h4').textContent===r.title && JSON.stringify(Array.from(role.querySelectorAll('.entry-meta'),p=>p.textContent))===JSON.stringify(r.meta) && JSON.stringify(Array.from(role.querySelectorAll('.entry-description'),p=>p.textContent))===JSON.stringify(r.description);});})`), true, 'All original employment values render unchanged');
+  assert.equal(await evaluate(`CONTENT.resume.education.every((entry,i)=>{const e=document.querySelectorAll('.education-entry')[i];return e.querySelector('h3').textContent===entry.institution && e.querySelector('p').textContent===entry.degree && e.querySelector('.entry-meta').textContent===entry.date;})`), true, 'Education fidelity');
+  assert.equal(await evaluate(`CONTENT.resume.certifications.every((c,i)=>{const e=document.querySelectorAll('.certification-entry')[i];return e.querySelector('h3').textContent===c.name && e.querySelector('a').href===c.url;})`), true, 'Certification names and exact credential URLs');
+  await evaluate(`window.__printed=false;window.print=()=>window.__printed=true;document.querySelector('#print-resume').click()`);
+  assert.equal(await evaluate('window.__printed'), true, 'Print button invokes native print');
+  await send('Emulation.setEmulatedMedia', {media:'print'});
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('#print-resume')).display`), 'none');
+  const pdf = await send('Page.printToPDF', {printBackground:false,preferCSSPageSize:true});
+  fs.writeFileSync(path.join(artifacts,'resume.pdf'), Buffer.from(pdf.data,'base64'));
+  await send('Emulation.setEmulatedMedia', {media:''});
+  await evaluate(`document.querySelector('#primary-navigation a[href="#contact"]').click()`);
+  await until(() => evaluate(`document.querySelector('#message-form') !== null`), 'Contact navigation');
+  await evaluate('history.back()');await until(() => evaluate(`location.hash === '#resume'`), 'history back');
+  await evaluate('history.forward()');await until(() => evaluate(`location.hash === '#contact'`), 'history forward');
+  await checkContact();
+  await send('Emulation.setDeviceMetricsOverride', {width:390,height:844,deviceScaleFactor:1,mobile:false});
+  await route('home');
+  assert.equal(await evaluate(`getComputedStyle(document.querySelector('#primary-navigation')).display`), 'none');
+  await evaluate(`document.querySelector('.menu-toggle').click()`);
+  assert.equal(await evaluate(`document.querySelector('.menu-toggle').getAttribute('aria-expanded')`), 'true');
+  assert.notEqual(await evaluate(`getComputedStyle(document.querySelector('#primary-navigation')).display`), 'none');
+  await evaluate(`document.querySelector('#primary-navigation a[href="#resume"]').click()`);
+  await until(() => evaluate(`document.querySelector('#main h1').textContent === 'Resume'`), 'mobile resume link');
+  assert.equal(await evaluate(`document.querySelector('.menu-toggle').getAttribute('aria-expanded')`), 'false', 'Menu closes after navigation');
+  assert.equal(await evaluate('document.activeElement.id'), 'main', 'Navigation focuses page content');
+  await evaluate(`document.querySelector('.menu-toggle').click();document.dispatchEvent(new KeyboardEvent('keydown',{key:'Escape',bubbles:true}))`);
+  assert.equal(await evaluate(`document.querySelector('.menu-toggle').getAttribute('aria-expanded')`), 'false');
+  assert.equal(await evaluate('document.activeElement.className'), 'menu-toggle');
+  await send('Page.navigate', {url:`${origin}/?keyboard-check#home`});
+  await until(() => evaluate(`location.search === '?keyboard-check' && document.readyState === 'complete' && document.activeElement === document.body`), 'keyboard check document');
+  for (const type of ['keyDown','keyUp']) await send('Input.dispatchKeyEvent',{type,key:'Tab',code:'Tab',windowsVirtualKeyCode:9});
+  assert.equal(await evaluate('document.activeElement.className'), 'skip-link');
+  for (const type of ['keyDown','keyUp']) await send('Input.dispatchKeyEvent',{type,key:'Enter',code:'Enter',windowsVirtualKeyCode:13});
+  assert.equal(await evaluate('document.activeElement.id'), 'main');
+  await route(articleRoute,true);
+  assert.equal(await evaluate(`document.querySelector('.blog-article time').dateTime`), '2025-06-30');
+  assert.equal(await evaluate(`document.querySelectorAll('.markdown-body img').length`), 4);
+  assert.equal(await evaluate(`document.querySelector('meta[property="og:type"]').content`), 'article');
+  assert.equal(await evaluate(`document.querySelector('link[rel="canonical"]').href`), 'https://cs-cybersecurity.github.io/christopher-scott-io/#' + articleRoute);
+  assert.equal(await evaluate(`document.querySelector('meta[property="article:published_time"]').content`), '2025-06-30T12:00:00Z');
+  assert.equal(await evaluate(`Array.from(document.querySelectorAll('a')).some(a=>/editor/.test(a.href))`), false, 'No public editor links');
+  await route('home');
+  assert.equal(await evaluate(`document.querySelector('[data-blog-metadata]')`), null, 'Article metadata removed on navigation');
+  await checkEditor();
+  assert.deepEqual(errors, [], 'No browser runtime or failed-resource errors');
+  console.log('PASS: Home, Resume and Contact at all five requested viewport sizes; loaded images, full photo framing, desktop hero fit and no horizontal overflow.');
+  console.log('PASS: exact resume content/credentials, CEH first, navigation/history, mobile menu, keyboard skip link, print action and saved PDF.');
+  console.log('PASS: mocked contact endpoint/payload, name inclusion, validation, length boundaries, spam prevention, duplicate prevention and failure feedback. No live submission or email delivery tested.');
+  console.log('Saved viewport screenshots, full homepage screenshots and resume.pdf in qa-artifacts/.');
+  console.log('PASS: Blog/articles at all five sizes, metadata, four original images, independent local editor import/save/create/preview and draft round trip.');
+})().catch(error => {console.error(error);process.exitCode = 1;}).finally(async () => {
+  if (socket?.readyState === WebSocket.OPEN) {try {await send('Browser.close');} catch {} socket.close();}
+  for (const request of requests.values()) {clearTimeout(request.timer);request.reject(Error('Browser closed'));}
+  if (browser && !browser.killed) browser.kill();
+  if (server && !server.killed) server.kill();
+  for (const file of temporaryPosts) if (fs.existsSync(file)) fs.unlinkSync(file);
+  if (temporaryPosts.length) execFileSync(process.execPath, ['scripts/build-blog.mjs'], {cwd:root});
 });
