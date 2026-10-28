@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import {parsePost,buildBlog} from './build-blog.mjs';
+import path from 'node:path';
+import {parsePost,buildBlog,readSiteURL,normalizeSiteURL} from './build-blog.mjs';
 
 const fixture = `---\ntitle: "Test & <example>"\ndate: 2025-06-30\nslug: test-post\n---\n\n# Heading\n\n**Bold** and [safe](https://example.com).\n\n| A | B |\n|---|---|\n| 1 | 2 |\n\n\`\`\`sh\n<script>alert('never executed')</script>\n\`\`\`\n\n<script>alert('unsafe')</script><img src="x" onerror="alert(1)">\n\n[bad](javascript:alert)\n`;
 const post = parsePost(fixture,'test.md');
@@ -27,6 +28,23 @@ assert.ok(!supplied.html.includes('![[Screenshot'));
 const feed=fs.readFileSync('rss.xml','utf8');
 assert.equal((feed.match(/<item>/g)||[]).length,posts.length);
 assert.ok(feed.includes('Mon, 30 Jun 2025 12:00:00 GMT'));
-assert.ok(feed.includes('https://christopher-scott.net/#blog/self-host-nextjs-with-docker-and-nginx'));
+assert.ok(feed.includes(`${readSiteURL()}#blog/self-host-nextjs-with-docker-and-nginx`));
+assert.ok(!feed.includes('christopher-scott.net'));
+assert.ok(feed.includes(`${readSiteURL()}assets/blog/`));
 assert.ok(feed.includes('<content:encoded>'));
 console.log('PASS: Markdown formatting, code escaping, HTML sanitization, metadata/drafts, article date, repaired source links, and full-content RSS generation.');
+
+assert.equal(normalizeSiteURL('https://example.com/project'), 'https://example.com/project/');
+assert.throws(() => normalizeSiteURL('javascript:alert(1)'));
+assert.throws(() => normalizeSiteURL('https://example.com/?query=1'));
+const anchored = parsePost('---\ntitle: Anchor test\ndate: 2025-06-30\nslug: anchor-test\n---\n\n# Heading\n\n[Jump](#heading)', 'anchor.md');
+assert.ok(anchored.html.includes('href="#blog/anchor-test/post-heading"'));
+fs.mkdirSync(path.resolve('qa-artifacts'), {recursive:true});
+const temp = fs.mkdtempSync(path.resolve('qa-artifacts/blog-fixture-'));
+fs.mkdirSync(path.join(temp, 'posts'));
+fs.writeFileSync(path.join(temp, 'posts', 'published.md'), fixture);
+fs.writeFileSync(path.join(temp, 'posts', 'draft.md'), fixture.replace('slug: test-post', 'slug: draft-test\ndraft: true'));
+assert.equal(buildBlog({rootDirectory:temp,siteURL:readSiteURL()}).length, 1);
+fs.writeFileSync(path.join(temp, 'posts', 'duplicate.md'), fixture);
+assert.throws(() => buildBlog({rootDirectory:temp,siteURL:readSiteURL()}), /Duplicate blog slug/);
+console.log('PASS: isolated draft exclusion, duplicate rejection, article anchors, configurable project URL, and absolute RSS image paths.');

@@ -15,9 +15,7 @@
   const linkedinURL = safeURL(SITE.linkedin);
   const heading = (title, text = '', kicker = '') => `<header class="page-heading">${kicker ? `<p class="page-kicker">${escape(kicker)}</p>` : ''}<h1>${escape(title)}</h1>${text ? `<p class="lead">${escape(text)}</p>` : ''}</header>`;
 
-  const serviceLink = (category, item) => `#services/${category.id}/${item.id}`;
   function homeExtras() {
-    document.querySelector('.services-overview').innerHTML = CATALOG.map((category,index)=>`<article class="overview-item"><span class="item-number">${String(index+1).padStart(2,'0')}</span><div><h3><a href="#services/${category.id}">${escape(category.title)}</a></h3><p>${escape(category.summary)}</p><a class="text-link" href="#services/${category.id}">${category.items.length} services &rarr; Explore</a></div></article>`).join('');
     const credentialArtwork = {'CompTIA PenTest+':'pentest.png','CompTIA Project+':'project.png','CompTIA Cybersecurity Analyst (CySA+)':'cysa.png','CompTIA Security+':'security.png','CompTIA Network+':'network.png','CompTIA A+':'a-plus.png','Certified Ethical Hacker (CEH)':'ec-council-issuer.webp'};
     const homepageCertifications = [...CONTENT.resume.certifications].sort((a,b) => Number(b.name === 'Certified Ethical Hacker (CEH)') - Number(a.name === 'Certified Ethical Hacker (CEH)'));
     document.querySelector('#home-certification-list').innerHTML = homepageCertifications.map(cert => {
@@ -25,12 +23,6 @@
       const issuerLogo = cert.name === 'Certified Ethical Hacker (CEH)';
       return `<li><a class="home-credential" href="${escape(cert.url)}" target="_blank" rel="noopener noreferrer">${artwork ? `<img class="${issuerLogo ? 'credential-issuer-logo' : 'credential-badge'}" src="assets/certifications/${artwork}" alt="${issuerLogo ? 'EC-Council issuer logo' : ''}" width="64" height="64" loading="lazy" decoding="async">` : ''}<span><strong>${escape(cert.name)}</strong><small>${escape(cert.issuer)}</small></span></a></li>`;
     }).join('');
-  }
-  function servicesPage() {
-    return `<div class="container">${heading('Services','Browse my services, then select an offering to learn how I can help.','Technology Consulting')}<div class="directory-layout"><aside class="directory-nav"><nav aria-label="Service categories"><p class="section-label">Browse services</p>${CATALOG.map(category=>`<a href="#services/${category.id}">${escape(category.title)} <span class="count">${category.items.length}</span></a>`).join('')}</nav></aside><div class="directory-content">${CATALOG.map(category=>`<section class="service-category" id="${category.id}" aria-labelledby="${category.id}-heading"><div class="category-heading"><p class="section-label">${category.items.length} offerings${category.origin==='New offerings'?' / New web development offerings':''}</p><h2 id="${category.id}-heading">${escape(category.title)}</h2><p class="category-intro">${escape(category.summary)}</p></div><ol class="service-list">${category.items.map((item,index)=>`<li><a href="${serviceLink(category,item)}"><span class="list-number">${String(index+1).padStart(2,'0')}</span><span>${escape(item.title)}</span><span aria-hidden="true">&rarr;</span></a></li>`).join('')}</ol></section>`).join('')}</div></div></div>`;
-  }
-  function serviceDetail(category,item) {
-    return `<div class="container service-detail"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="#services">Services</a><span aria-hidden="true"> / </span><a href="#services/${category.id}">${escape(category.title)}</a></nav>${heading(item.title,'',category.title)}<section aria-labelledby="overview-title"><h2 id="overview-title">Overview</h2><p class="detail-overview">${escape(item.overview)}</p></section><section aria-labelledby="help-title"><h2 id="help-title">How I Can Help</h2><ul>${item.help.map(point=>`<li>${escape(point)}</li>`).join('')}</ul></section><div class="detail-action"><a class="button" href="#contact/${category.id}/${item.id}">Book a Consultation</a><p>Discuss your requirements directly with me.</p></div></div>`;
   }
   const logos = {'Bank of America':'bank-of-america.jpg','Trustwave, A LevelBlue Company':'trustwave.ico','Trustwave':'trustwave.ico','Transwest':'transwest.svg','Lumen Technologies':'lumen.png','City and County of Denver':'denver.ico','Front Range Community College':'frcc.svg'};
   function companyMark(group) {
@@ -54,8 +46,24 @@
     </div>`;
   }
 
-  function contactPage(selected) {
-    return `<div class="container contact-page">${heading('Get in Touch',"Have a project or technical challenge you'd like to discuss? Send me a message.")}<p class="email-display"><span>Email</span><a href="mailto:chris@christopher-scott.net">chris@christopher-scott.net</a></p><form id="message-form" action="https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec" method="post">${selected?`<p class="service-context">Regarding: ${escape(selected.title)}</p>`:''}<label for="visitor-email">Email Address</label><input id="visitor-email" type="email" name="email" required maxlength="254" autocomplete="email"><input type="text" name="website" value="" hidden tabindex="-1" autocomplete="off" aria-hidden="true"><label for="message">Message</label><textarea id="message" name="message" rows="7" required minlength="10" maxlength="5000" placeholder="Tell me about your project or technical challenge.">${selected?escape(`I'd like to discuss ${selected.title}.`):''}</textarea><p class="email-note">Submit your message here, or email me directly.</p><button type="submit" class="button">Send Message</button><p id="email-status" role="status" aria-live="polite"></p></form></div>`;
+  function contactPage() {
+    return `<div class="container contact-page">${heading('Get in Touch',"I'm always open to connecting with fellow technology professionals, discussing cybersecurity research, and exploring meaningful professional opportunities.")}
+      <div class="contact-layout">
+        <div class="contact-methods">
+          <section class="contact-method" aria-labelledby="contact-email"><h2 id="contact-email">Email</h2><a class="contact-detail" href="mailto:${escape(SITE.email)}">${escape(SITE.email)}</a><p>For professional correspondence and introductions.</p></section>
+          <section class="contact-method" aria-labelledby="contact-linkedin"><h2 id="contact-linkedin">LinkedIn</h2><p>Connect with me professionally.</p>${externalLink(linkedinURL, 'View LinkedIn Profile')}</section>
+          <section class="contact-method" aria-labelledby="contact-github"><h2 id="contact-github">GitHub</h2><p>Explore my public technical work.</p>${externalLink(safeURL(SITE.github), 'View GitHub Profile')}</section>
+        </div>
+        <form id="message-form" action="https://script.google.com/macros/s/AKfycbyApUCyiSJnz4StzEvdMwLX7ib0fnWCidAvpVbR8g6fmHoLlmjUbzgqq3dh4pvzRGR3FQ/exec" method="post">
+          <label for="visitor-name">Name</label><input id="visitor-name" type="text" name="name" required maxlength="120" autocomplete="name">
+          <label for="visitor-email">Email</label><input id="visitor-email" type="email" name="email" required maxlength="254" autocomplete="email">
+          <input type="text" name="website" value="" hidden tabindex="-1" autocomplete="off" aria-hidden="true">
+          <label for="message">Message</label><textarea id="message" name="message" rows="7" required minlength="10" maxlength="5000" aria-describedby="message-limit" placeholder="Share your message or introduce yourself."></textarea>
+          <p class="email-note" id="message-limit">Up to 5,000 characters including your name. You can also email me directly.</p>
+          <button type="submit" class="button">Send Message</button><p id="email-status" role="status" aria-live="polite"></p>
+        </form>
+      </div>
+    </div>`;
   }
 
   const blogDate = date => new Intl.DateTimeFormat('en-US', {month:'long',day:'numeric',year:'numeric',timeZone:'UTC'}).format(new Date(date+'T12:00:00Z'));
@@ -64,73 +72,73 @@
     const post = posts.find(entry => entry.slug === slug);
     if (slug && !post) return `<div class="container blog-page">${heading('Post not found')}<p>This post is unavailable.</p><a class="text-link" href="#blog">Back to Blog</a></div>`;
     if (post) return `<div class="container blog-article"><nav class="breadcrumb" aria-label="Breadcrumb"><a href="#blog">Blog</a></nav><header class="page-heading"><p class="page-kicker"><time datetime="${escape(post.date)}">${blogDate(post.date)}</time> · Christopher Scott</p><h1>${escape(post.title)}</h1></header><article class="markdown-body" aria-label="${escape(post.title)}">${post.html}</article><div class="blog-article-footer"><a class="text-link" href="#blog">Back to all posts</a><a class="text-link" href="rss.xml">Subscribe via RSS</a></div></div>`;
-    const local = ['localhost','127.0.0.1','[::1]'].includes(location.hostname);
-    return `<div class="container blog-page"><div class="blog-heading">${heading('Blog','Notes on infrastructure, development, and security.')}<a class="text-link" href="rss.xml">Subscribe via RSS</a></div>${local ? '<p class="blog-local-tools"><a class="text-link" href="blog-editor.html">Add a local Markdown post</a></p>' : ''}<div class="blog-post-list">${posts.map(entry=>`<article class="blog-post-summary"><time datetime="${escape(entry.date)}">${blogDate(entry.date)}</time><div><h2><a href="#blog/${entry.slug}">${escape(entry.title)}</a></h2><p>${escape(entry.description)}</p><a class="text-link" href="#blog/${entry.slug}">Read article <span aria-hidden="true">→</span></a></div></article>`).join('')}</div></div>`;
+    return `<div class="container blog-page"><div class="blog-heading">${heading('Blog','Notes on infrastructure, development, and security.')}<a class="text-link" href="rss.xml">Subscribe via RSS</a></div><div class="blog-post-list">${posts.map(entry=>`<article class="blog-post-summary"><time datetime="${escape(entry.date)}">${blogDate(entry.date)}</time><div><h2><a href="#blog/${entry.slug}">${escape(entry.title)}</a></h2><p>${escape(entry.description)}</p><a class="text-link" href="#blog/${entry.slug}">Read article <span aria-hidden="true">→</span></a></div></article>`).join('')}</div></div>`;
+  }
+
+  // Absolute URLs are used only for Blog metadata; other pages keep their existing metadata.
+  function blogMetadata(page, slug, post) {
+    document.querySelectorAll('[data-blog-metadata]').forEach(element => element.remove());
+    document.querySelector('meta[property="og:type"]').content = post ? 'article' : 'website';
+    if (page !== 'blog') return;
+    const baseURL = safeURL(SITE.url);
+    const url = baseURL ? `${baseURL}#blog${slug && post ? `/${post.slug}` : ''}` : '';
+    const addMeta = (property, content) => {
+      const meta = document.createElement('meta');
+      meta.setAttribute('property', property);
+      meta.content = content;
+      meta.dataset.blogMetadata = '';
+      document.head.append(meta);
+    };
+    if (url) {
+      const canonical = document.createElement('link');
+      canonical.rel = 'canonical';
+      canonical.href = url;
+      canonical.dataset.blogMetadata = '';
+      document.head.append(canonical);
+      addMeta('og:url', url);
+    }
+    if (post) {
+      addMeta('article:published_time', `${post.date}T12:00:00Z`);
+      addMeta('article:author', SITE.name);
+    }
   }
 
   const pageTitles = {
-    home: 'Christopher Scott | IT Consulting, Cybersecurity & Web Development',
-    services: 'Services | Christopher Scott — Technology Consulting',
+    home: 'Christopher Scott | Cybersecurity & IT Professional',
     resume: 'Resume | Christopher Scott',
     blog: 'Blog | Christopher Scott',
     contact: 'Contact | Christopher Scott'
   };
   const descriptions = {
-    home: 'Work directly with Christopher Scott, an independent technology consultant providing IT consulting, cybersecurity, cloud infrastructure, compliance consulting and web development.',
-    services: 'Explore cybersecurity, compliance, cloud and IT consulting, web development, and technical advisory services from Christopher Scott.',
-    resume: 'Christopher Scott’s professional experience, education, and licenses and certifications, as supplied from LinkedIn.',
-    blog: 'Blog | Christopher Scott.',
-    contact: 'Contact Christopher Scott directly about IT consulting, cybersecurity, cloud infrastructure, compliance consulting and web development.'
+    home: 'Professional portfolio and resume of Christopher Scott, specializing in enterprise cybersecurity, IT infrastructure, detection engineering, malware analysis, and threat intelligence.',
+    resume: 'Christopher Scott\u2019s professional experience, employment history, education, and verified licenses and certifications in cybersecurity and IT.',
+    blog: 'Technical writing by Christopher Scott on infrastructure, development, and security.',
+    contact: 'Connect with Christopher Scott for professional networking, cybersecurity research, and meaningful professional opportunities.'
   };
 
   function readRoute() {
-    const [page, section, service] = location.hash.slice(1).split('/');
-    return {page: Object.hasOwn(pageTitles, page) ? page : 'home', section, service};
+    const [page, slug, anchor] = location.hash.slice(1).split('/');
+    return {page: Object.hasOwn(pageTitles, page) ? page : 'home', slug, anchor};
   }
 
   function render({initial = false} = {}) {
-    const {page, section, service} = readRoute();
-    const category = CATALOG.find(c=>c.id===section);
-    const selected = category?.items.find(item=>item.id===service);
-    main.innerHTML = page === 'home' ? homeHTML : page === 'services' ? (selected ? serviceDetail(category,selected) : servicesPage()) : page === 'resume' ? resumePage() : page === 'blog' ? blogPage(section) : contactPage(selected);
-    if(page==='home') homeExtras();
-    document.querySelectorAll('.company-mark img').forEach(img=>img.addEventListener('error',()=>img.remove()));
-    document.title = selected && page==='services' ? `${selected.title} | Christopher Scott` : pageTitles[page];
-    document.querySelector('meta[name="description"]').content = selected && page==='services' ? selected.overview : descriptions[page];
-    if (page === 'blog' && section) {
-      const post = (window.BLOG_POSTS || []).find(entry => entry.slug === section);
-      if (post) { document.title = `${post.title} | Christopher Scott`; document.querySelector('meta[name="description"]').content = post.description; }
-    }
+    const {page, slug, anchor} = readRoute();
+    const post = page === 'blog' ? (window.BLOG_POSTS || []).find(entry => entry.slug === slug) : null;
+    main.innerHTML = page === 'home' ? homeHTML : page === 'resume' ? resumePage() : page === 'blog' ? blogPage(slug) : contactPage();
+    if (page === 'home') homeExtras();
+    document.querySelectorAll('.company-mark img').forEach(img => img.addEventListener('error', () => img.remove()));
+    document.title = post ? `${post.title} | Christopher Scott` : pageTitles[page];
+    document.querySelector('meta[name="description"]').content = post ? post.description : descriptions[page];
     document.querySelector('meta[property="og:title"]').content = document.title;
     document.querySelector('meta[property="og:description"]').content = document.querySelector('meta[name="description"]').content;
-    const baseURL = safeURL(SITE.url) || 'https://christopher-scott.net/';
-    document.querySelector('meta[property="og:url"]').content = page === 'home' ? baseURL : `${baseURL}${location.hash}`;
+    blogMetadata(page, slug, post);
     navigation.querySelectorAll('a').forEach(link => {
       if (link.hash === `#${page}`) link.setAttribute('aria-current', 'page');
       else link.removeAttribute('aria-current');
     });
     menu.setAttribute('aria-expanded', 'false');
-
-    if (page === 'home' && SITE.photoUrl) {
-      const photoURL = safeURL(SITE.photoUrl);
-      if (photoURL) {
-        const image = document.createElement('img');
-        image.className = 'personal-photo';
-        image.src = photoURL;
-        image.alt = SITE.photoAlt || 'Christopher Scott';
-        image.width = 160;
-        image.height = 200;
-        image.loading = 'lazy';
-        image.addEventListener('error', () => image.remove());
-        document.querySelector('#personal-photograph').append(image);
-      }
-    }
-
-    const target = page === 'services' && section && !selected ? document.getElementById(section) : null;
+    const target = page === 'blog' && post && anchor ? document.getElementById(anchor) : null;
     if (target) {
-      document.querySelectorAll('.directory-nav a').forEach(link => {
-        if (link.hash === `#services/${section}`) link.setAttribute('aria-current', 'true');
-      });
       target.setAttribute('tabindex', '-1');
       target.focus({preventScroll: true});
       target.scrollIntoView({block: 'start', behavior: 'instant'});
@@ -139,7 +147,6 @@
       window.scrollTo({top: 0, left: 0, behavior: 'instant'});
     }
   }
-
   menu.addEventListener('click', () => menu.setAttribute('aria-expanded', String(menu.getAttribute('aria-expanded') !== 'true')));
   document.addEventListener('keydown', event => {
     if (event.key === 'Escape' && menu.getAttribute('aria-expanded') === 'true') {
@@ -162,24 +169,28 @@
     }
   });
   document.addEventListener('input', event=>{
-    if (event.target.form?.id === 'message-form') event.target.setCustomValidity('');
+    if (event.target.form?.id !== 'message-form') return;
+    event.target.setCustomValidity('');
+    if (event.target.name === 'name') event.target.form.elements.message.setCustomValidity('');
   });
   document.addEventListener('submit', async event=>{
     if(event.target.id!=='message-form') return;
     event.preventDefault();
     const form=event.target;
     if(form.dataset.submitting === 'true') return;
+    const visitorName=form.elements.namedItem('name');
     const email=form.elements.email;
     const message=form.elements.message;
+    visitorName.value=visitorName.value.replace(/\s+/g, ' ').trim();
     email.value=email.value.trim();
+    visitorName.setCustomValidity(!visitorName.value ? 'Please enter your name.' : visitorName.value.length > 120 ? 'Please use no more than 120 characters for your name.' : '');
     email.setCustomValidity(email.value.length > 254 ? 'Please use an email address with no more than 254 characters.' : '');
     message.setCustomValidity(message.value.trim().length < 10 ? 'Please enter at least 10 characters.' : message.value.length > 5000 ? 'Please use no more than 5,000 characters.' : '');
     if(!form.reportValidity()) return;
-    const {section,service}=readRoute();
-    const selected=CATALOG.find(c=>c.id===section)?.items.find(i=>i.id===service);
-    const bodyMessage=selected ? `Service: ${selected.title}\n\n${message.value.trim()}` : message.value.trim();
+    // Keep the backend's existing field contract; the name travels in the message.
+    const bodyMessage=`Name: ${visitorName.value}\n\n${message.value.trim()}`;
     if(bodyMessage.length > 5000){
-      message.setCustomValidity('Please keep your message and selected service context within 5,000 characters.');
+      message.setCustomValidity('Please keep your message and name within 5,000 characters.');
       message.reportValidity();
       return;
     }

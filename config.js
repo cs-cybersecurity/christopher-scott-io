@@ -1,9 +1,8 @@
-// Verified public identity and optional contact / photograph configuration.
+// Professional contact details. Blog/RSS URLs default to this repository's Pages path.
 window.SITE = {
   name: 'Christopher Scott',
-  url: 'https://christopher-scott.net/',
+  url: 'https://cs-cybersecurity.github.io/christopher-scott-io/',
   linkedin: 'https://www.linkedin.com/in/cs-cybersecurity',
-  email: 'christopher.scott.biz@gmail.com', // Authorized contact destination; static email-app workflow, no delivery backend.
-  photoUrl: '', // Optional path to a genuine personal photo, e.g. './assets/christopher.jpg'.
-  photoAlt: 'Christopher Scott'
+  github: 'https://github.com/cs-cybersecurity',
+  email: 'christopher.scott.biz@gmail.com'
 };

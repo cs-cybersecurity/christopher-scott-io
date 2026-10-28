@@ -1,15 +1,20 @@
 {
-  "name": "christopher-scott-site",
-  "version": "2.0.0",
+  "name": "christopher-scott-io",
+  "version": "3.0.0",
   "private": true,
-  "description": "Christopher Scott \u2014 IT Consulting, Cybersecurity & Web Development",
+  "description": "Christopher Scott — Cybersecurity & IT Professional",
   "scripts": {
     "start": "node server.js",
-    "check": "node --check app.js && node --check config.js && node --check content.js && node --check server.js && node scripts/validate-content.js && node --check service-details.js && node scripts/validate-directory.js && node --check blog-editor.js && node scripts/test-blog.mjs",
+    "check": "node --check app.js && node --check config.js && node --check content.js && node --check server.js && node --check scripts/browser-check.js && node scripts/validate-content.js",
     "check:browser": "node scripts/browser-check.js",
     "blog:build": "node scripts/build-blog.mjs",
+    "blog:import": "node scripts/import-post.mjs",
+    "test:blog": "node scripts/test-blog.mjs",
     "prestart": "npm run blog:build",
-    "blog:import": "node scripts/import-post.mjs"
+    "blog:editor": "node server.js --editor",
+    "preblog:editor": "npm run blog:build",
+    "build": "node scripts/build-site.mjs",
+    "preview:public": "node server.js --dist"
   },
   "devDependencies": {
     "marked": "^18.1.1",
